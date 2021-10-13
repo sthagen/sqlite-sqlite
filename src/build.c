@@ -683,7 +683,7 @@ void sqlite3ColumnSetExpr(
   Expr *pExpr       /* The new default expression */
 ){
   ExprList *pList;
-  assert( !IsVirtual(pTab) );
+  assert( IsOrdinaryTable(pTab) );
   pList = pTab->u.tab.pDfltList;
   if( pCol->iDflt==0
    || NEVER(pList==0)
@@ -704,7 +704,7 @@ void sqlite3ColumnSetExpr(
 */
 Expr *sqlite3ColumnExpr(Table *pTab, Column *pCol){
   if( pCol->iDflt==0 ) return 0;
-  if( NEVER(IsVirtual(pTab)) ) return 0;
+  if( NEVER(!IsOrdinaryTable(pTab)) ) return 0;
   if( NEVER(pTab->u.tab.pDfltList==0) ) return 0;
   if( NEVER(pTab->u.tab.pDfltList->nExpr<pCol->iDflt) ) return 0;
   return pTab->u.tab.pDfltList->a[pCol->iDflt-1].pExpr;
@@ -763,13 +763,13 @@ void sqlite3DeleteColumnNames(sqlite3 *db, Table *pTable){
       sqlite3DbFree(db, pCol->zCnName);
     }
     sqlite3DbFree(db, pTable->aCol);
-    if( !IsVirtual(pTable) ){
+    if( IsOrdinaryTable(pTable) ){
       sqlite3ExprListDelete(db, pTable->u.tab.pDfltList);
     }
     if( db==0 || db->pnBytesFreed==0 ){
       pTable->aCol = 0;
       pTable->nCol = 0;
-      if( !IsVirtual(pTable) ){
+      if( IsOrdinaryTable(pTable) ){
         pTable->u.tab.pDfltList = 0;
       }
     }
@@ -888,10 +888,10 @@ void sqlite3UnlinkAndDeleteTable(sqlite3 *db, int iDb, const char *zTabName){
 ** are not \000 terminated and are not persistent.  The returned string
 ** is \000 terminated and is persistent.
 */
-char *sqlite3NameFromToken(sqlite3 *db, Token *pName){
+char *sqlite3NameFromToken(sqlite3 *db, const Token *pName){
   char *zName;
   if( pName ){
-    zName = sqlite3DbStrNDup(db, (char*)pName->z, pName->n);
+    zName = sqlite3DbStrNDup(db, (const char*)pName->z, pName->n);
     sqlite3Dequote(zName);
   }else{
     zName = 0;
@@ -1836,7 +1836,9 @@ void sqlite3AddPrimaryKey(
       assert( pCExpr!=0 );
       sqlite3StringToId(pCExpr);
       if( pCExpr->op==TK_ID ){
-        const char *zCName = pCExpr->u.zToken;
+        const char *zCName;
+        assert( !ExprHasProperty(pCExpr, EP_IntValue) );
+        zCName = pCExpr->u.zToken;
         for(iCol=0; iCol<pTab->nCol; iCol++){
           if( sqlite3StrICmp(zCName, pTab->aCol[iCol].zCnName)==0 ){
             pCol = &pTab->aCol[iCol];
@@ -2584,7 +2586,7 @@ void sqlite3EndTable(
   ** table itself.  So mark it read-only.
   */
   if( db->init.busy ){
-    if( pSelect ){
+    if( pSelect || (!IsOrdinaryTable(p) && db->init.newTnum) ){
       sqlite3ErrorMsg(pParse, "");
       return;
     }
@@ -3549,6 +3551,7 @@ void sqlite3CreateForeignKey(
     goto fk_end;
   }
   pFKey->pFrom = p;
+  assert( IsOrdinaryTable(p) );
   pFKey->pNextFrom = p->u.tab.pFKey;
   z = (char*)&pFKey->aCol[nCol];
   pFKey->zTo = z;
@@ -3614,7 +3617,7 @@ void sqlite3CreateForeignKey(
 
   /* Link the foreign key to the table as the last step.
   */
-  assert( !IsVirtual(p) );
+  assert( IsOrdinaryTable(p) );
   p->u.tab.pFKey = pFKey;
   pFKey = 0;
 
@@ -3637,7 +3640,7 @@ void sqlite3DeferForeignKey(Parse *pParse, int isDeferred){
   Table *pTab;
   FKey *pFKey;
   if( (pTab = pParse->pNewTable)==0 ) return;
-  if( NEVER(IsVirtual(pTab)) ) return;
+  if( NEVER(!IsOrdinaryTable(pTab)) ) return;
   if( (pFKey = pTab->u.tab.pFKey)==0 ) return;
   assert( isDeferred==0 || isDeferred==1 ); /* EV: R-30323-21917 */
   pFKey->isDeferred = (u8)isDeferred;
@@ -4039,6 +4042,7 @@ void sqlite3CreateIndex(
     Expr *pExpr = pList->a[i].pExpr;
     assert( pExpr!=0 );
     if( pExpr->op==TK_COLLATE ){
+      assert( !ExprHasProperty(pExpr, EP_IntValue) );
       nExtra += (1 + sqlite3Strlen30(pExpr->u.zToken));
     }
   }
@@ -4134,6 +4138,7 @@ void sqlite3CreateIndex(
     zColl = 0;
     if( pListItem->pExpr->op==TK_COLLATE ){
       int nColl;
+      assert( !ExprHasProperty(pListItem->pExpr, EP_IntValue) );
       zColl = pListItem->pExpr->u.zToken;
       nColl = sqlite3Strlen30(zColl) + 1;
       assert( nExtra>=nColl );
@@ -4382,7 +4387,7 @@ exit_create_index:
     ** The list was already ordered when this routine was entered, so at this
     ** point at most a single index (the newly added index) will be out of
     ** order.  So we have to reorder at most one index. */
-    Index **ppFrom = &pTab->pIndex;
+    Index **ppFrom;
     Index *pThis;
     for(ppFrom=&pTab->pIndex; (pThis = *ppFrom)!=0; ppFrom=&pThis->pNext){
       Index *pNext;
@@ -4922,6 +4927,7 @@ void sqlite3SrcListIndexedBy(Parse *pParse, SrcList *p, Token *pIndexedBy){
     }else{
       pItem->u1.zIndexedBy = sqlite3NameFromToken(pParse->db, pIndexedBy);
       pItem->fg.isIndexedBy = 1;
+      assert( pItem->fg.isCte==0 );  /* No collision on union u2 */
     }
   }
 }
