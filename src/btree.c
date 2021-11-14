@@ -3939,16 +3939,18 @@ int sqlite3BtreeIncrVacuum(Btree *p){
 /*
 ** This routine is called prior to sqlite3PagerCommit when a transaction
 ** is committed for an auto-vacuum database.
-**
-** If SQLITE_OK is returned, then *pnTrunc is set to the number of pages
-** the database file should be truncated to during the commit process. 
-** i.e. the database has been reorganized so that only the first *pnTrunc
-** pages are in use.
 */
-static int autoVacuumCommit(BtShared *pBt){
+static int autoVacuumCommit(Btree *p){
   int rc = SQLITE_OK;
-  Pager *pPager = pBt->pPager;
-  VVA_ONLY( int nRef = sqlite3PagerRefcount(pPager); )
+  Pager *pPager;
+  BtShared *pBt;
+  sqlite3 *db;
+  VVA_ONLY( int nRef );
+
+  assert( p!=0 );
+  pBt = p->pBt;  
+  pPager = pBt->pPager;
+  VVA_ONLY( nRef = sqlite3PagerRefcount(pPager); )
 
   assert( sqlite3_mutex_held(pBt->mutex) );
   invalidateAllOverflowCache(pBt);
@@ -3956,6 +3958,7 @@ static int autoVacuumCommit(BtShared *pBt){
   if( !pBt->incrVacuum ){
     Pgno nFin;         /* Number of pages in database after autovacuuming */
     Pgno nFree;        /* Number of pages on the freelist initially */
+    Pgno nVac;         /* Number of pages to vacuum */
     Pgno iFree;        /* The next page to be freed */
     Pgno nOrig;        /* Database size before freeing */
 
@@ -3969,18 +3972,42 @@ static int autoVacuumCommit(BtShared *pBt){
     }
 
     nFree = get4byte(&pBt->pPage1->aData[36]);
-    nFin = finalDbSize(pBt, nOrig, nFree);
+    db = p->db;
+    if( db->xAutovacPages ){
+      int iDb;
+      for(iDb=0; ALWAYS(iDb<db->nDb); iDb++){
+        if( db->aDb[iDb].pBt==p ) break;
+      }
+      nVac = db->xAutovacPages(
+        db->pAutovacPagesArg,
+        db->aDb[iDb].zDbSName,
+        nOrig,
+        nFree,
+        pBt->pageSize
+      );
+      if( nVac>nFree ){
+        nVac = nFree;
+      }
+      if( nVac==0 ){
+        return SQLITE_OK;
+      }
+    }else{
+      nVac = nFree;
+    }
+    nFin = finalDbSize(pBt, nOrig, nVac);
     if( nFin>nOrig ) return SQLITE_CORRUPT_BKPT;
     if( nFin<nOrig ){
       rc = saveAllCursors(pBt, 0, 0);
     }
     for(iFree=nOrig; iFree>nFin && rc==SQLITE_OK; iFree--){
-      rc = incrVacuumStep(pBt, nFin, iFree, 1);
+      rc = incrVacuumStep(pBt, nFin, iFree, nVac==nFree);
     }
     if( (rc==SQLITE_DONE || rc==SQLITE_OK) && nFree>0 ){
       rc = sqlite3PagerWrite(pBt->pPage1->pDbPage);
-      put4byte(&pBt->pPage1->aData[32], 0);
-      put4byte(&pBt->pPage1->aData[36], 0);
+      if( nVac==nFree ){
+        put4byte(&pBt->pPage1->aData[32], 0);
+        put4byte(&pBt->pPage1->aData[36], 0);
+      }
       put4byte(&pBt->pPage1->aData[28], nFin);
       pBt->bDoTruncate = 1;
       pBt->nPage = nFin;
@@ -4031,7 +4058,7 @@ int sqlite3BtreeCommitPhaseOne(Btree *p, const char *zSuperJrnl){
     sqlite3BtreeEnter(p);
 #ifndef SQLITE_OMIT_AUTOVACUUM
     if( pBt->autoVacuum ){
-      rc = autoVacuumCommit(pBt);
+      rc = autoVacuumCommit(p);
       if( rc!=SQLITE_OK ){
         sqlite3BtreeLeave(p);
         return rc;
@@ -4836,7 +4863,9 @@ static int accessPayload(
   assert( pPage );
   assert( eOp==0 || eOp==1 );
   assert( pCur->eState==CURSOR_VALID );
-  assert( pCur->ix<pPage->nCell );
+  if( pCur->ix>=pPage->nCell ){
+    return SQLITE_CORRUPT_PAGE(pPage);
+  }
   assert( cursorHoldsMutex(pCur) );
 
   getCellInfo(pCur);
@@ -5023,7 +5052,6 @@ int sqlite3BtreePayload(BtCursor *pCur, u32 offset, u32 amt, void *pBuf){
   assert( cursorHoldsMutex(pCur) );
   assert( pCur->eState==CURSOR_VALID );
   assert( pCur->iPage>=0 && pCur->pPage );
-  assert( pCur->ix<pCur->pPage->nCell );
   return accessPayload(pCur, offset, amt, (unsigned char*)pBuf, 0);
 }
 
@@ -6358,7 +6386,7 @@ static int freePage2(BtShared *pBt, MemPage *pMemPage, Pgno iPage){
   assert( CORRUPT_DB || iPage>1 );
   assert( !pMemPage || pMemPage->pgno==iPage );
 
-  if( iPage<2 || iPage>pBt->nPage ){
+  if( NEVER(iPage<2) || iPage>pBt->nPage ){
     return SQLITE_CORRUPT_BKPT;
   }
   if( pMemPage ){
@@ -7083,7 +7111,7 @@ static int rebuildPage(
 
   assert( i<iEnd );
   j = get2byte(&aData[hdr+5]);
-  if( NEVER(j>(u32)usableSize) ){ j = 0; }
+  if( j>(u32)usableSize ){ j = 0; }
   memcpy(&pTmp[j], &aData[j], usableSize - j);
 
   for(k=0; pCArray->ixNx[k]<=i && ALWAYS(k<NB*2); k++){}
@@ -9548,11 +9576,12 @@ static int clearDatabasePage(
   }
   rc = getAndInitPage(pBt, pgno, &pPage, 0, 0);
   if( rc ) return rc;
-  if( pPage->bBusy ){
+  if( (pBt->openFlags & BTREE_SINGLE)==0 
+   && sqlite3PagerPageRefcount(pPage->pDbPage)!=1
+  ){
     rc = SQLITE_CORRUPT_BKPT;
     goto cleardatabasepage_out;
   }
-  pPage->bBusy = 1;
   hdr = pPage->hdrOffset;
   for(i=0; i<pPage->nCell; i++){
     pCell = findCell(pPage, i);
@@ -9579,7 +9608,6 @@ static int clearDatabasePage(
   }
 
 cleardatabasepage_out:
-  pPage->bBusy = 0;
   releasePage(pPage);
   return rc;
 }
@@ -9658,10 +9686,10 @@ static int btreeDropTable(Btree *p, Pgno iTable, int *piMoved){
     return SQLITE_CORRUPT_BKPT;
   }
 
-  rc = btreeGetPage(pBt, (Pgno)iTable, &pPage, 0);
-  if( rc ) return rc;
   rc = sqlite3BtreeClearTable(p, iTable, 0);
-  if( rc ){
+  if( rc ) return rc;
+  rc = btreeGetPage(pBt, (Pgno)iTable, &pPage, 0);
+  if( NEVER(rc) ){
     releasePage(pPage);
     return rc;
   }

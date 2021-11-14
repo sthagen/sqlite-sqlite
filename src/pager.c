@@ -630,6 +630,7 @@ struct Pager {
   u8 noLock;                  /* Do not lock (except in WAL mode) */
   u8 readOnly;                /* True for a read-only database */
   u8 memDb;                   /* True to inhibit all file I/O */
+  u8 memVfs;                  /* VFS-implemented memory database */
 
   /**************************************************************************
   ** The following block contains those class members that change during
@@ -4872,7 +4873,7 @@ int sqlite3PagerOpen(
     rc = sqlite3OsOpen(pVfs, pPager->zFilename, pPager->fd, vfsFlags, &fout);
     assert( !memDb );
 #ifndef SQLITE_OMIT_DESERIALIZE
-    memJM = (fout&SQLITE_OPEN_MEMORY)!=0;
+    pPager->memVfs = memJM = (fout&SQLITE_OPEN_MEMORY)!=0;
 #endif
     readOnly = (fout&SQLITE_OPEN_READONLY)!=0;
 
@@ -6809,7 +6810,7 @@ void sqlite3PagerCacheStat(Pager *pPager, int eStat, int reset, int *pnVal){
 ** Return true if this is an in-memory or temp-file backed pager.
 */
 int sqlite3PagerIsMemdb(Pager *pPager){
-  return pPager->tempFile;
+  return pPager->tempFile || pPager->memVfs;
 }
 
 /*
@@ -7129,7 +7130,7 @@ int sqlite3PagerMovepage(Pager *pPager, DbPage *pPg, Pgno pgno, int isCommit){
   pPgOld = sqlite3PagerLookup(pPager, pgno);
   assert( !pPgOld || pPgOld->nRef==1 || CORRUPT_DB );
   if( pPgOld ){
-    if( pPgOld->nRef>1 ){
+    if( NEVER(pPgOld->nRef>1) ){
       sqlite3PagerUnrefNotNull(pPgOld);
       return SQLITE_CORRUPT_BKPT;
     }

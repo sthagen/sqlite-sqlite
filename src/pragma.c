@@ -467,7 +467,11 @@ void sqlite3Pragma(
 
   /* Locate the pragma in the lookup table */
   pPragma = pragmaLocate(zLeft);
-  if( pPragma==0 ) goto pragma_out;
+  if( pPragma==0 ){
+    /* IMP: R-43042-22504 No error messages are generated if an
+    ** unknown pragma is issued. */
+    goto pragma_out;
+  }
 
   /* Make sure the database schema is loaded if the pragma requires that */
   if( (pPragma->mPragFlg & PragFlg_NeedSchema)!=0 ){
@@ -1120,9 +1124,9 @@ void sqlite3Pragma(
         if( (mask & SQLITE_WriteSchema)!=0
          && sqlite3_stricmp(zRight, "reset")==0
         ){
-          /* "PRAGMA writable_schema=RESET" turns schema writing off, just
-          ** like "PRAGMA writable_schema=OFF, but also causes the schema
-          ** to be reloaded. */
+          /* IMP: R-60817-01178 If the argument is "RESET" then schema
+          ** writing is disabled (as with "PRAGMA writable_schema=OFF") and,
+          ** in addition, the schema is reloaded. */
           sqlite3ResetAllSchemasOfConnection(db);
         }
       }
@@ -1223,8 +1227,35 @@ void sqlite3Pragma(
     for(ii=0; ii<db->nDb; ii++){
       HashElem *k;
       Hash *pHash;
+      int initNCol;
       if( zDb && sqlite3_stricmp(zDb, db->aDb[ii].zDbSName)!=0 ) continue;
+
+      /* Ensure that the Table.nCol field is initialized for all views
+      ** and virtual tables.  Each time we initialize a Table.nCol value
+      ** for a table, that can potentially disrupt the hash table, so restart
+      ** the initialization scan.
+      */
       pHash = &db->aDb[ii].pSchema->tblHash;
+      initNCol = sqliteHashCount(pHash);
+      while( initNCol-- ){
+        for(k=sqliteHashFirst(pHash); 1; k=sqliteHashNext(k) ){
+          Table *pTab;
+          if( k==0 ){ initNCol = 0; break; }
+          pTab = sqliteHashData(k);
+          if( pTab->nCol==0 ){
+            char *zSql = sqlite3MPrintf(db, "SELECT*FROM\"%w\"", pTab->zName);
+            if( zSql ){
+              sqlite3_stmt *pDummy = 0;
+              (void)sqlite3_prepare(db, zSql, -1, &pDummy, 0);
+              (void)sqlite3_finalize(pDummy);
+              sqlite3DbFree(db, zSql);
+            }
+            pHash = &db->aDb[ii].pSchema->tblHash;
+            break;
+          }
+        }
+      }
+
       for(k=sqliteHashFirst(pHash); k; k=sqliteHashNext(k) ){
         Table *pTab = sqliteHashData(k);
         const char *zType;
@@ -1240,7 +1271,7 @@ void sqlite3Pragma(
         }
         sqlite3VdbeMultiLoad(v, 1, "sssiii",
            db->aDb[ii].zDbSName,
-           pTab->zName,
+           sqlite3PreferredTableName(pTab->zName),
            zType,
            pTab->nCol,
            (pTab->tabFlags & TF_WithoutRowid)!=0,
@@ -1260,7 +1291,7 @@ void sqlite3Pragma(
     for(i=sqliteHashFirst(&pDb->pSchema->tblHash); i; i=sqliteHashNext(i)){
       Table *pTab = sqliteHashData(i);
       sqlite3VdbeMultiLoad(v, 1, "ssiii",
-           pTab->zName,
+           sqlite3PreferredTableName(pTab->zName),
            0,
            pTab->szTabRow,
            pTab->nRowLogEst,
@@ -1755,7 +1786,7 @@ void sqlite3Pragma(
             zErr = sqlite3MPrintf(db, "NULL value in %s.%s", pTab->zName,
                                 pCol->zCnName);
             sqlite3VdbeAddOp4(v, OP_String8, 0, 3, 0, zErr, P4_DYNAMIC);
-            if( bStrict ){
+            if( bStrict && pCol->eCType!=COLTYPE_ANY ){
               sqlite3VdbeGoto(v, doError);
             }else{
               integrityCheckResultRow(v);
@@ -2309,12 +2340,12 @@ void sqlite3Pragma(
   case PragTyp_ANALYSIS_LIMIT: {
     sqlite3_int64 N;
     if( zRight
-     && sqlite3DecOrHexToI64(zRight, &N)==SQLITE_OK
+     && sqlite3DecOrHexToI64(zRight, &N)==SQLITE_OK /* IMP: R-40975-20399 */
      && N>=0
     ){
       db->nAnalysisLimit = (int)(N&0x7fffffff);
     }
-    returnSingleInt(v, db->nAnalysisLimit);
+    returnSingleInt(v, db->nAnalysisLimit); /* IMP: R-57594-65522 */
     break;
   }
 

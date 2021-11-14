@@ -430,7 +430,9 @@ static Expr *removeUnindexableInClauseTerms(
     pOrigLhs = pNew->pLeft->x.pList;
     for(i=iEq; i<pLoop->nLTerm; i++){
       if( pLoop->aLTerm[i]->pExpr==pX ){
-        int iField = pLoop->aLTerm[i]->u.x.iField - 1;
+        int iField;
+        assert( (pLoop->aLTerm[i]->eOperator & (WO_OR|WO_AND))==0 );
+        iField = pLoop->aLTerm[i]->u.x.iField - 1;
         if( pOrigRhs->a[iField].pExpr==0 ) continue; /* Duplicate PK column */
         pRhs = sqlite3ExprListAppend(pParse, pRhs, pOrigRhs->a[iField].pExpr);
         pOrigRhs->a[iField].pExpr = 0;
@@ -567,8 +569,8 @@ static int codeEqualityTerm(
     sqlite3VdbeAddOp2(v, bRev ? OP_Last : OP_Rewind, iTab, 0);
     VdbeCoverageIf(v, bRev);
     VdbeCoverageIf(v, !bRev);
-    assert( (pLoop->wsFlags & WHERE_MULTI_OR)==0 );
 
+    assert( (pLoop->wsFlags & WHERE_MULTI_OR)==0 );
     pLoop->wsFlags |= WHERE_IN_ABLE;
     if( pLevel->u.in.nIn==0 ){
       pLevel->addrNxt = sqlite3VdbeMakeLabel(pParse);
@@ -1430,7 +1432,12 @@ Bitmask sqlite3WhereCodeOneLoopStart(
     pLevel->p1 = iCur;
     pLevel->op = pWInfo->eOnePass ? OP_Noop : OP_VNext;
     pLevel->p2 = sqlite3VdbeCurrentAddr(v);
-    iIn = pLevel->u.in.nIn;
+    assert( (pLoop->wsFlags & WHERE_MULTI_OR)==0 );
+    if( pLoop->wsFlags & WHERE_IN_ABLE ){
+      iIn = pLevel->u.in.nIn;
+    }else{
+      iIn = 0;
+    }
     for(j=nConstraint-1; j>=0; j--){
       pTerm = pLoop->aLTerm[j];
       if( (pTerm->eOperator & WO_IN)!=0 ) iIn--;
@@ -1877,8 +1884,19 @@ Bitmask sqlite3WhereCodeOneLoopStart(
     ** range (if any).
     */
     nConstraint = nEq;
+    assert( pLevel->p2==0 );
     if( pRangeEnd ){
       Expr *pRight = pRangeEnd->pExpr->pRight;
+      if( addrSeekScan ){
+        /* For a seek-scan that has a range on the lowest term of the index,
+        ** we have to make the top of the loop be code that sets the end
+        ** condition of the range.  Otherwise, the OP_SeekScan might jump
+        ** over that initialization, leaving the range-end value set to the
+        ** range-start value, resulting in a wrong answer.
+        ** See ticket 5981a8c041a3c2f3 (2021-11-02).
+        */
+        pLevel->p2 = sqlite3VdbeCurrentAddr(v);
+      }
       codeExprOrVector(pParse, pRight, regBase+nEq, nTop);
       whereLikeOptimizationStringFixup(v, pLevel, pRangeEnd);
       if( (pRangeEnd->wtFlags & TERM_VNULL)==0
@@ -1912,7 +1930,7 @@ Bitmask sqlite3WhereCodeOneLoopStart(
     sqlite3DbFree(db, zEndAff);
 
     /* Top of the loop body */
-    pLevel->p2 = sqlite3VdbeCurrentAddr(v);
+    if( pLevel->p2==0 ) pLevel->p2 = sqlite3VdbeCurrentAddr(v);
 
     /* Check if the index cursor is past the end of the range. */
     if( nConstraint ){
@@ -2319,7 +2337,10 @@ Bitmask sqlite3WhereCodeOneLoopStart(
       }
     }
     ExplainQueryPlanPop(pParse);
-    pLevel->u.pCovidx = pCov;
+    assert( pLevel->pWLoop==pLoop );
+    assert( (pLoop->wsFlags & WHERE_MULTI_OR)!=0 );
+    assert( (pLoop->wsFlags & WHERE_IN_ABLE)==0 );
+    pLevel->u.pCoveringIdx = pCov;
     if( pCov ) pLevel->iIdxCur = iCovCur;
     if( pAndExpr ){
       pAndExpr->pLeft = 0;
@@ -2463,6 +2484,7 @@ Bitmask sqlite3WhereCodeOneLoopStart(
 #endif
     assert( !ExprHasProperty(pE, EP_FromJoin) );
     assert( (pTerm->prereqRight & pLevel->notReady)!=0 );
+    assert( (pTerm->eOperator & (WO_OR|WO_AND))==0 );
     pAlt = sqlite3WhereFindTerm(pWC, iCur, pTerm->u.x.leftColumn, notReady,
                     WO_EQ|WO_IN|WO_IS, 0);
     if( pAlt==0 ) continue;
