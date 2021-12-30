@@ -26,6 +26,15 @@
 #include "sqlite3ext.h"
 #endif
 SQLITE_EXTENSION_INIT1
+
+/* If compiling this extension separately (why would anybody do that when
+** it is built into the amalgamation?) we must set NDEBUG if SQLITE_DEBUG
+** is not defined *before* including <assert.h>, in order to disable asserts().
+*/
+#if !defined(SQLITE_AMALGAMATION) && !defined(SQLITE_DEBUG)
+#  define NDEBUG 1
+#endif
+
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1662,8 +1671,11 @@ static JsonNode *jsonMergePatch(
           if( pNew==0 ) return 0;
           pTarget = &pParse->aNode[iTarget];
           if( pNew!=&pTarget[j+1] ){
-            assert( pTarget[j+1].eU==0 || pTarget[j+1].eU==1 );
+            assert( pTarget[j+1].eU==0
+                 || pTarget[j+1].eU==1
+                 || pTarget[j+1].eU==2 );
             testcase( pTarget[j+1].eU==1 );
+            testcase( pTarget[j+1].eU==2 );
             VVA( pTarget[j+1].eU = 5 );
             pTarget[j+1].u.pPatch = pNew;
             pTarget[j+1].jnFlags |= JNODE_PATCH;

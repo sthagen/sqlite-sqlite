@@ -695,7 +695,7 @@
 ** number of pages.  A negative number N translations means that a buffer
 ** of -1024*N bytes is allocated and used for as many pages as it will hold.
 **
-** The default value of "20" was choosen to minimize the run-time of the
+** The default value of "20" was chosen to minimize the run-time of the
 ** speedtest1 test program with options: --shrink-memory --reprepare
 */
 #ifndef SQLITE_DEFAULT_PCACHE_INITSZ
@@ -1527,6 +1527,7 @@ struct sqlite3 {
   u32 nSchemaLock;              /* Do not reset the schema when non-zero */
   unsigned int openFlags;       /* Flags passed to sqlite3_vfs.xOpen() */
   int errCode;                  /* Most recent error code (SQLITE_*) */
+  int errByteOffset;            /* Byte offset of error in SQL statement */
   int errMask;                  /* & result codes with this before returning */
   int iSysErrno;                /* Errno value from last system error */
   u32 dbOptFlags;               /* Flags to enable/disable optimizations */
@@ -1712,6 +1713,7 @@ struct sqlite3 {
 #define SQLITE_CountRows      HI(0x00001) /* Count rows changed by INSERT, */
                                           /*   DELETE, or UPDATE and return */
                                           /*   the count using a callback. */
+#define SQLITE_CorruptRdOnly  HI(0x00002) /* Prohibit writes due to error */
 
 /* Flags used only if debugging */
 #ifdef SQLITE_DEBUG
@@ -1760,6 +1762,9 @@ struct sqlite3 {
 #define SQLITE_SeekScan       0x00020000 /* The OP_SeekScan optimization */
 #define SQLITE_OmitOrderBy    0x00040000 /* Omit pointless ORDER BY */
    /* TH3 expects this value  ^^^^^^^^^^ to be 0x40000. Coordinate any change */
+#define SQLITE_BloomFilter    0x00080000 /* Use a Bloom filter on searches */
+#define SQLITE_BloomPulldown  0x00100000 /* Run Bloom filters early */
+#define SQLITE_BalancedMerge  0x00200000 /* Balance multi-way merges */
 #define SQLITE_AllOpts        0xffffffff /* All optimizations */
 
 /*
@@ -3554,7 +3559,6 @@ struct Parse {
   AutoincInfo *pAinc;  /* Information about AUTOINCREMENT counters */
   Parse *pToplevel;    /* Parse structure for main program (or NULL) */
   Table *pTriggerTab;  /* Table triggers are being coded for */
-  Parse *pParentParse; /* Parent parser if this parser is nested */
   union {
     int addrCrTab;         /* Address of OP_CreateBtree on CREATE TABLE */
     Returning *pReturning; /* The RETURNING clause */
@@ -4563,6 +4567,7 @@ void sqlite3OpenTable(Parse*, int iCur, int iDb, Table*, int);
 #if defined(SQLITE_ENABLE_UPDATE_DELETE_LIMIT) && !defined(SQLITE_OMIT_SUBQUERY)
 Expr *sqlite3LimitWhere(Parse*,SrcList*,Expr*,ExprList*,Expr*,char*);
 #endif
+void sqlite3CodeChangeCount(Vdbe*,int,const char*);
 void sqlite3DeleteFrom(Parse*, SrcList*, Expr*, ExprList*, Expr*);
 void sqlite3Update(Parse*, SrcList*, ExprList*,Expr*,int,ExprList*,Expr*,
                    Upsert*);
@@ -4681,6 +4686,7 @@ Select *sqlite3SelectDup(sqlite3*,const Select*,int);
 FuncDef *sqlite3FunctionSearch(int,const char*);
 void sqlite3InsertBuiltinFuncs(FuncDef*,int);
 FuncDef *sqlite3FindFunction(sqlite3*,const char*,int,u8,u8);
+void sqlite3QuoteValue(StrAccum*,sqlite3_value*);
 void sqlite3RegisterBuiltinFunctions(void);
 void sqlite3RegisterDateTimeFunctions(void);
 void sqlite3RegisterPerConnectionBuiltinFunctions(sqlite3*);
@@ -4773,14 +4779,8 @@ int sqlite3Utf8CharLen(const char *pData, int nByte);
 u32 sqlite3Utf8Read(const u8**);
 LogEst sqlite3LogEst(u64);
 LogEst sqlite3LogEstAdd(LogEst,LogEst);
-#ifndef SQLITE_OMIT_VIRTUALTABLE
 LogEst sqlite3LogEstFromDouble(double);
-#endif
-#if defined(SQLITE_ENABLE_STMT_SCANSTATUS) || \
-    defined(SQLITE_ENABLE_STAT4) || \
-    defined(SQLITE_EXPLAIN_ESTIMATED_ROWS)
 u64 sqlite3LogEstToInt(LogEst);
-#endif
 VList *sqlite3VListAdd(sqlite3*,VList*,const char*,int,int);
 const char *sqlite3VListNumToName(VList*,int);
 int sqlite3VListNameToNum(VList*,const char*,int);
@@ -4973,11 +4973,13 @@ int sqlite3ApiExit(sqlite3 *db, int);
 int sqlite3OpenTempDatabase(Parse *);
 
 void sqlite3StrAccumInit(StrAccum*, sqlite3*, char*, int, int);
+int sqlite3StrAccumEnlarge(StrAccum*, int);
 char *sqlite3StrAccumFinish(StrAccum*);
 void sqlite3StrAccumSetError(StrAccum*, u8);
 void sqlite3ResultStrAccum(sqlite3_context*,StrAccum*);
 void sqlite3SelectDestInit(SelectDest*,int,int);
 Expr *sqlite3CreateColumnExpr(sqlite3 *, SrcList *, int, int);
+void sqlite3RecordErrorByteOffset(sqlite3*,const char*);
 
 void sqlite3BackupRestart(sqlite3_backup *);
 void sqlite3BackupUpdate(sqlite3_backup *, Pgno, const u8 *);
@@ -5112,7 +5114,7 @@ const char *sqlite3JournalModename(int);
 # define sqlite3CteDelete(D,C)
 # define sqlite3CteWithAdd(P,W,C) ((void*)0)
 # define sqlite3WithDelete(x,y)
-# define sqlite3WithPush(x,y,z)
+# define sqlite3WithPush(x,y,z) ((void*)0)
 #endif
 #ifndef SQLITE_OMIT_UPSERT
   Upsert *sqlite3UpsertNew(sqlite3*,ExprList*,Expr*,ExprList*,Expr*,Upsert*);

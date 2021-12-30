@@ -672,6 +672,30 @@ static Mem *out2Prerelease(Vdbe *p, VdbeOp *pOp){
 }
 
 /*
+** Compute a bloom filter hash using pOp->p4.i registers from aMem[] beginning
+** with pOp->p3.  Return the hash.
+*/
+static u64 filterHash(const Mem *aMem, const Op *pOp){
+  int i, mx;
+  u64 h = 0;
+
+  i = pOp->p3;
+  assert( pOp->p4type==P4_INT32 );
+  for(i=pOp->p3, mx=i+pOp->p4.i; i<mx; i++){
+    const Mem *p = &aMem[i];
+    if( p->flags & (MEM_Int|MEM_IntReal) ){
+      h += p->u.i;
+    }else if( p->flags & MEM_Real ){
+      h += sqlite3VdbeIntValue(p);
+    }else if( p->flags & (MEM_Str|MEM_Blob) ){
+      h += p->n;
+      if( p->flags & MEM_Zero ) h += p->u.nZero;
+    }
+  }
+  return h;
+}
+
+/*
 ** Return the symbolic name for the data type of a pMem
 */
 static const char *vdbeMemTypeName(Mem *pMem){
@@ -1325,12 +1349,18 @@ case OP_SoftNull: {
 ** Synopsis: r[P2]=P4 (len=P1)
 **
 ** P4 points to a blob of data P1 bytes long.  Store this
-** blob in register P2.
+** blob in register P2.  If P4 is a NULL pointer, then construct
+** a zero-filled blob that is P1 bytes long in P2.
 */
 case OP_Blob: {                /* out2 */
   assert( pOp->p1 <= SQLITE_MAX_LENGTH );
   pOut = out2Prerelease(p, pOp);
-  sqlite3VdbeMemSetStr(pOut, pOp->p4.z, pOp->p1, 0, 0);
+  if( pOp->p4.z==0 ){
+    sqlite3VdbeMemSetZeroBlob(pOut, pOp->p1);
+    if( sqlite3VdbeMemExpandBlob(pOut) ) goto no_mem;
+  }else{
+    sqlite3VdbeMemSetStr(pOut, pOp->p4.z, pOp->p1, 0, 0);
+  }
   pOut->enc = encoding;
   UPDATE_MAX_BLOBSIZE(pOut);
   break;
@@ -1479,24 +1509,22 @@ case OP_IntCopy: {            /* out2 */
   break;
 }
 
-/* Opcode: ChngCntRow P1 P2 * * *
-** Synopsis: output=r[P1]
+/* Opcode: FkCheck * * * * *
 **
-** Output value in register P1 as the chance count for a DML statement,
-** due to the "PRAGMA count_changes=ON" setting.  Or, if there was a
-** foreign key error in the statement, trigger the error now.
+** Halt with an SQLITE_CONSTRAINT error if there are any unresolved
+** foreign key constraint violations.  If there are no foreign key
+** constraint violations, this is a no-op.
 **
-** This opcode is a variant of OP_ResultRow that checks the foreign key
-** immediate constraint count and throws an error if the count is
-** non-zero.  The P2 opcode must be 1.
+** FK constraint violations are also checked when the prepared statement
+** exits.  This opcode is used to raise foreign key constraint errors prior
+** to returning results such as a row change count or the result of a 
+** RETURNING clause.
 */
-case OP_ChngCntRow: {
-  assert( pOp->p2==1 );
+case OP_FkCheck: {
   if( (rc = sqlite3VdbeCheckFk(p,0))!=SQLITE_OK ){
     goto abort_due_to_error;
   }
-  /* Fall through to the next case, OP_ResultRow */
-  /* no break */ deliberate_fall_through
+  break;
 }
 
 /* Opcode: ResultRow P1 P2 * * *
@@ -3343,7 +3371,7 @@ case OP_MakeRecord: {
   break;
 }
 
-/* Opcode: Count P1 P2 p3 * *
+/* Opcode: Count P1 P2 P3 * *
 ** Synopsis: r[P2]=count()
 **
 ** Store the number of entries (an integer value) in the table or index 
@@ -3665,8 +3693,15 @@ case OP_Transaction: {
   assert( pOp->p1>=0 && pOp->p1<db->nDb );
   assert( DbMaskTest(p->btreeMask, pOp->p1) );
   assert( rc==SQLITE_OK );
-  if( pOp->p2 && (db->flags & SQLITE_QueryOnly)!=0 ){
-    rc = SQLITE_READONLY;
+  if( pOp->p2 && (db->flags & (SQLITE_QueryOnly|SQLITE_CorruptRdOnly))!=0 ){
+    if( db->flags & SQLITE_QueryOnly ){
+      /* Writes prohibited by the "PRAGMA query_only=TRUE" statement */
+      rc = SQLITE_READONLY;
+    }else{
+      /* Writes prohibited due to a prior SQLITE_CORRUPT in the current
+      ** transaction */
+      rc = SQLITE_CORRUPT;
+    }
     goto abort_due_to_error;
   }
   pBt = db->aDb[pOp->p1].pBt;
@@ -7735,6 +7770,7 @@ case OP_VFilter: {   /* jump */
   pCur = p->apCsr[pOp->p1];
   assert( memIsValid(pQuery) );
   REGISTER_TRACE(pOp->p3, pQuery);
+  assert( pCur!=0 );
   assert( pCur->eCurType==CURTYPE_VTAB );
   pVCur = pCur->uc.pVCur;
   pVtab = pVCur->pVtab;
@@ -7783,6 +7819,7 @@ case OP_VColumn: {
   sqlite3_context sContext;
 
   VdbeCursor *pCur = p->apCsr[pOp->p1];
+  assert( pCur!=0 );
   assert( pCur->eCurType==CURTYPE_VTAB );
   assert( pOp->p3>0 && pOp->p3<=(p->nMem+1 - p->nCursor) );
   pDest = &aMem[pOp->p3];
@@ -7836,6 +7873,7 @@ case OP_VNext: {   /* jump */
   VdbeCursor *pCur;
 
   pCur = p->apCsr[pOp->p1];
+  assert( pCur!=0 );
   assert( pCur->eCurType==CURTYPE_VTAB );
   if( pCur->nullRow ){
     break;
@@ -7931,7 +7969,7 @@ case OP_VUpdate: {
   const sqlite3_module *pModule;
   int nArg;
   int i;
-  sqlite_int64 rowid;
+  sqlite_int64 rowid = 0;
   Mem **apArg;
   Mem *pX;
 
@@ -8116,6 +8154,77 @@ case OP_Function: {            /* group */
 
   REGISTER_TRACE(pOp->p3, pOut);
   UPDATE_MAX_BLOBSIZE(pOut);
+  break;
+}
+
+/* Opcode: FilterAdd P1 * P3 P4 *
+** Synopsis: filter(P1) += key(P3@P4)
+**
+** Compute a hash on the P4 registers starting with r[P3] and
+** add that hash to the bloom filter contained in r[P1].
+*/
+case OP_FilterAdd: {
+  u64 h;
+
+  assert( pOp->p1>0 && pOp->p1<=(p->nMem+1 - p->nCursor) );
+  pIn1 = &aMem[pOp->p1];
+  assert( pIn1->flags & MEM_Blob );
+  assert( pIn1->n>0 );
+  h = filterHash(aMem, pOp);
+#ifdef SQLITE_DEBUG
+  if( db->flags&SQLITE_VdbeTrace ){
+    int ii;
+    for(ii=pOp->p3; ii<pOp->p3+pOp->p4.i; ii++){
+      registerTrace(ii, &aMem[ii]);
+    }
+    printf("hash: %llu modulo %d -> %u\n", h, pIn1->n, (int)(h%pIn1->n));
+  }
+#endif
+  h %= pIn1->n;
+  pIn1->z[h/8] |= 1<<(h&7);
+  break;
+}
+
+/* Opcode: Filter P1 P2 P3 P4 *
+** Synopsis: if key(P3@P4) not in filter(P1) goto P2
+**
+** Compute a hash on the key contained in the P4 registers starting
+** with r[P3].  Check to see if that hash is found in the
+** bloom filter hosted by register P1.  If it is not present then
+** maybe jump to P2.  Otherwise fall through.
+**
+** False negatives are harmless.  It is always safe to fall through,
+** even if the value is in the bloom filter.  A false negative causes
+** more CPU cycles to be used, but it should still yield the correct
+** answer.  However, an incorrect answer may well arise from a
+** false positive - if the jump is taken when it should fall through.
+*/
+case OP_Filter: {          /* jump */
+  u64 h;
+
+  assert( pOp->p1>0 && pOp->p1<=(p->nMem+1 - p->nCursor) );
+  pIn1 = &aMem[pOp->p1];
+  assert( (pIn1->flags & MEM_Blob)!=0 );
+  assert( pIn1->n >= 1 );
+  h = filterHash(aMem, pOp);
+#ifdef SQLITE_DEBUG
+  if( db->flags&SQLITE_VdbeTrace ){
+    int ii;
+    for(ii=pOp->p3; ii<pOp->p3+pOp->p4.i; ii++){
+      registerTrace(ii, &aMem[ii]);
+    }
+    printf("hash: %llu modulo %d -> %u\n", h, pIn1->n, (int)(h%pIn1->n));
+  }
+#endif
+  h %= pIn1->n;
+  if( (pIn1->z[h/8] & (1<<(h&7)))==0 ){
+    VdbeBranchTaken(1, 2);
+    p->aCounter[SQLITE_STMTSTATUS_FILTER_HIT]++;
+    goto jump_to_p2;
+  }else{
+    p->aCounter[SQLITE_STMTSTATUS_FILTER_MISS]++;
+    VdbeBranchTaken(0, 2);
+  }
   break;
 }
 
@@ -8378,7 +8487,14 @@ abort_due_to_error:
   assert( rc );
 #ifdef SQLITE_DEBUG
   if( db->flags & SQLITE_VdbeTrace ){
-     printf("ABORT-due-to-error.  rc=%d\n", rc);
+    const char *zTrace = p->zSql;
+    if( zTrace==0 ){
+      if( aOp[0].opcode==OP_Trace ){
+        zTrace = aOp[0].p4.z;
+      }
+      if( zTrace==0 ) zTrace = "???";
+    }
+    printf("ABORT-due-to-error (rc=%d): %s\n", rc, zTrace);
   }
 #endif
   if( p->zErrMsg==0 && rc!=SQLITE_IOERR_NOMEM ){
@@ -8391,6 +8507,9 @@ abort_due_to_error:
                    (int)(pOp - aOp), p->zSql, p->zErrMsg);
   sqlite3VdbeHalt(p);
   if( rc==SQLITE_IOERR_NOMEM ) sqlite3OomFault(db);
+  if( rc==SQLITE_CORRUPT && db->autoCommit==0 ){
+    db->flags |= SQLITE_CorruptRdOnly;
+  }
   rc = SQLITE_ERROR;
   if( resetSchemaOnFault>0 ){
     sqlite3ResetOneSchema(db, resetSchemaOnFault-1);

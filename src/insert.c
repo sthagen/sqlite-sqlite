@@ -1382,9 +1382,7 @@ insert_end:
   ** invoke the callback function.
   */
   if( regRowCount ){
-    sqlite3VdbeAddOp2(v, OP_ChngCntRow, regRowCount, 1);
-    sqlite3VdbeSetNumCols(v, 1);
-    sqlite3VdbeSetColName(v, 0, COLNAME_NAME, "rows inserted", SQLITE_STATIC);
+    sqlite3CodeChangeCount(v, regRowCount, "rows inserted");
   }
 
 insert_cleanup:
@@ -2009,6 +2007,7 @@ void sqlite3GenerateConstraintChecks(
     if( onError==OE_Replace      /* IPK rule is REPLACE */
      && onError!=overrideError   /* Rules for other constraints are different */
      && pTab->pIndex             /* There exist other constraints */
+     && !upsertIpkDelay          /* IPK check already deferred by UPSERT */
     ){
       ipkTop = sqlite3VdbeAddOp0(v, OP_Goto)+1;
       VdbeComment((v, "defer IPK REPLACE until last"));
@@ -2417,6 +2416,7 @@ void sqlite3GenerateConstraintChecks(
   if( ipkTop ){
     sqlite3VdbeGoto(v, ipkTop);
     VdbeComment((v, "Do IPK REPLACE"));
+    assert( ipkBottom>0 );
     sqlite3VdbeJumpHere(v, ipkBottom);
   }
 

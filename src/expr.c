@@ -2457,7 +2457,7 @@ int sqlite3ExprCanBeNull(const Expr *p){
       return ExprHasProperty(p, EP_CanBeNull) ||
              p->y.pTab==0 ||  /* Reference to column of index on expression */
              (p->iColumn>=0
-              && ALWAYS(p->y.pTab->aCol!=0) /* Defense against OOM problems */
+              && p->y.pTab->aCol!=0 /* Possible due to prior error */
               && p->y.pTab->aCol[p->iColumn].notNull==0);
     default:
       return 1;
@@ -2803,7 +2803,8 @@ int sqlite3FindInIndex(
             CollSeq *pReq = sqlite3BinaryCompareCollSeq(pParse, pLhs, pRhs);
             int j;
   
-            assert( pReq!=0 || pRhs->iColumn==XN_ROWID || pParse->nErr );
+            assert( pReq!=0 || pRhs->iColumn==XN_ROWID 
+                   || pParse->nErr || db->mallocFailed );
             for(j=0; j<nExpr; j++){
               if( pIdx->aiColumn[j]!=pRhs->iColumn ) continue;
               assert( pIdx->azColl[j] );
@@ -5468,12 +5469,9 @@ int sqlite3ExprCompare(
     }
     return 2;
   }
-  if( pA->op!=TK_COLUMN
-   && pA->op!=TK_AGG_COLUMN
-   && ALWAYS(!ExprHasProperty(pA, EP_IntValue))
-   && pA->u.zToken
-  ){
-    assert( !ExprHasProperty(pB, EP_IntValue) );
+  assert( !ExprHasProperty(pA, EP_IntValue) );
+  assert( !ExprHasProperty(pB, EP_IntValue) );
+  if( pA->u.zToken ){
     if( pA->op==TK_FUNCTION || pA->op==TK_AGG_FUNCTION ){
       if( sqlite3StrICmp(pA->u.zToken,pB->u.zToken)!=0 ) return 2;
 #ifndef SQLITE_OMIT_WINDOWFUNC
@@ -5491,7 +5489,12 @@ int sqlite3ExprCompare(
       return 0;
     }else if( pA->op==TK_COLLATE ){
       if( sqlite3_stricmp(pA->u.zToken,pB->u.zToken)!=0 ) return 2;
-    }else if( ALWAYS(pB->u.zToken!=0) && strcmp(pA->u.zToken,pB->u.zToken)!=0 ){
+    }else 
+    if( pB->u.zToken!=0
+     && pA->op!=TK_COLUMN
+     && pA->op!=TK_AGG_COLUMN
+     && strcmp(pA->u.zToken,pB->u.zToken)!=0
+    ){
       return 2;
     }
   }
@@ -5885,7 +5888,7 @@ int sqlite3ExprCoveredByIndex(
 struct RefSrcList {
   sqlite3 *db;         /* Database connection used for sqlite3DbRealloc() */
   SrcList *pRef;       /* Looking for references to these tables */
-  int nExclude;        /* Number of tables to exclude from the search */
+  i64 nExclude;        /* Number of tables to exclude from the search */
   int *aiExclude;      /* Cursor IDs for tables to exclude from the search */
 };
 
@@ -5900,7 +5903,8 @@ struct RefSrcList {
 static int selectRefEnter(Walker *pWalker, Select *pSelect){
   struct RefSrcList *p = pWalker->u.pRefSrcList;
   SrcList *pSrc = pSelect->pSrc;
-  int i, j, *piNew;
+  i64 i, j;
+  int *piNew;
   if( pSrc->nSrc==0 ) return WRC_Continue;
   j = p->nExclude;
   p->nExclude += pSrc->nSrc;

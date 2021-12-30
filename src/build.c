@@ -173,6 +173,7 @@ void sqlite3FinishCoding(Parse *pParse){
       if( pReturning->nRetCol==0 ){
         assert( CORRUPT_DB );
       }else{
+        sqlite3VdbeAddOp0(v, OP_FkCheck);
         addrRewind =
            sqlite3VdbeAddOp1(v, OP_Rewind, pReturning->iRetCur);
         VdbeCoverage(v);
@@ -742,8 +743,8 @@ void sqlite3ColumnSetColl(
   Column *pCol,
   const char *zColl
 ){
-  int nColl;
-  int n;
+  i64 nColl;
+  i64 n;
   char *zNew;
   assert( zColl!=0 );
   n = sqlite3Strlen30(pCol->zCnName) + 1;
@@ -1548,7 +1549,7 @@ void sqlite3AddColumn(Parse *pParse, Token sName, Token sType){
     }
   }
 
-  z = sqlite3DbMallocRaw(db, sName.n + 1 + sType.n + (sType.n>0) );
+  z = sqlite3DbMallocRaw(db, (i64)sName.n + 1 + (i64)sType.n + (sType.n>0) );
   if( z==0 ) return;
   if( IN_RENAME_OBJECT ) sqlite3RenameTokenMap(pParse, (void*)z, &sName);
   memcpy(z, sName.z, sName.n);
@@ -1562,7 +1563,7 @@ void sqlite3AddColumn(Parse *pParse, Token sName, Token sType){
       return;
     }
   }
-  aNew = sqlite3DbRealloc(db,p->aCol,(p->nCol+1)*sizeof(p->aCol[0]));
+  aNew = sqlite3DbRealloc(db,p->aCol,((i64)p->nCol+1)*sizeof(p->aCol[0]));
   if( aNew==0 ){
     sqlite3DbFree(db, z);
     return;
@@ -3575,7 +3576,7 @@ void sqlite3CreateForeignKey(
   FKey *pFKey = 0;
   FKey *pNextTo;
   Table *p = pParse->pNewTable;
-  int nByte;
+  i64 nByte;
   int i;
   int nCol;
   char *z;
@@ -4405,13 +4406,13 @@ void sqlite3CreateIndex(
       /* Add an entry in sqlite_schema for this index
       */
       sqlite3NestedParse(pParse, 
-          "INSERT INTO %Q." LEGACY_SCHEMA_TABLE " VALUES('index',%Q,%Q,#%d,%Q);",
-          db->aDb[iDb].zDbSName,
-          pIndex->zName,
-          pTab->zName,
-          iMem,
-          zStmt
-          );
+         "INSERT INTO %Q." LEGACY_SCHEMA_TABLE " VALUES('index',%Q,%Q,#%d,%Q);",
+         db->aDb[iDb].zDbSName,
+         pIndex->zName,
+         pTab->zName,
+         iMem,
+         zStmt
+      );
       sqlite3DbFree(db, zStmt);
 
       /* Fill the index with data and reparse the schema. Code an OP_Expire
@@ -4959,7 +4960,7 @@ SrcList *sqlite3SrcListAppendFromTerm(
   pItem->pUsing = pUsing;
   return p;
 
- append_from_error:
+append_from_error:
   assert( p==0 );
   sqlite3ExprDelete(db, pOn);
   sqlite3IdListDelete(db, pUsing);

@@ -2196,7 +2196,7 @@ void sqlite3SelectAddColumnTypeAndCollation(
   a = pSelect->pEList->a;
   for(i=0, pCol=pTab->aCol; i<pTab->nCol; i++, pCol++){
     const char *zType;
-    int n, m;
+    i64 n, m;
     pTab->tabFlags |= (pCol->colFlags & COLFLAG_NOINSERT);
     p = a[i].pExpr;
     zType = columnType(&sNC, p, 0, 0, 0);
@@ -2209,6 +2209,9 @@ void sqlite3SelectAddColumnTypeAndCollation(
       if( pCol->zCnName ){
         memcpy(&pCol->zCnName[n+1], zType, m+1);
         pCol->colFlags |= COLFLAG_HASTYPE;
+      }else{
+        testcase( pCol->colFlags & COLFLAG_HASTYPE );
+        pCol->colFlags &= ~(COLFLAG_HASTYPE|COLFLAG_HASCOLL);
       }
     }
     if( pCol->affinity<=SQLITE_AFF_NONE ) pCol->affinity = aff;
@@ -3293,6 +3296,8 @@ static int multiSelectOrderBy(
 ){
   int i, j;             /* Loop counters */
   Select *pPrior;       /* Another SELECT immediately to our left */
+  Select *pSplit;       /* Left-most SELECT in the right-hand group */
+  int nSelect;          /* Number of SELECT statements in the compound */
   Vdbe *v;              /* Generate code to this VDBE */
   SelectDest destA;     /* Destination for coroutine A */
   SelectDest destB;     /* Destination for coroutine B */
@@ -3338,8 +3343,7 @@ static int multiSelectOrderBy(
   /* Patch up the ORDER BY clause
   */
   op = p->op;  
-  pPrior = p->pPrior;
-  assert( pPrior->pOrderBy==0 );
+  assert( p->pPrior->pOrderBy==0 );
   pOrderBy = p->pOrderBy;
   assert( pOrderBy );
   nOrderBy = pOrderBy->nExpr;
@@ -3389,11 +3393,6 @@ static int multiSelectOrderBy(
     pKeyMerge = 0;
   }
 
-  /* Reattach the ORDER BY clause to the query.
-  */
-  p->pOrderBy = pOrderBy;
-  pPrior->pOrderBy = sqlite3ExprListDup(pParse->db, pOrderBy, 0);
-
   /* Allocate a range of temporary registers and the KeyInfo needed
   ** for the logic that removes duplicate result rows when the
   ** operator is UNION, EXCEPT, or INTERSECT (but not UNION ALL).
@@ -3418,9 +3417,30 @@ static int multiSelectOrderBy(
  
   /* Separate the left and the right query from one another
   */
-  p->pPrior = 0;
+  nSelect = 1;
+  if( (op==TK_ALL || op==TK_UNION)
+   && OptimizationEnabled(db, SQLITE_BalancedMerge)
+  ){
+    for(pSplit=p; pSplit->pPrior!=0 && pSplit->op==op; pSplit=pSplit->pPrior){
+      nSelect++;
+      assert( pSplit->pPrior->pNext==pSplit );
+    }
+  }
+  if( nSelect<=3 ){
+    pSplit = p;
+  }else{
+    pSplit = p;
+    for(i=2; i<nSelect; i+=2){ pSplit = pSplit->pPrior; }
+  }
+  pPrior = pSplit->pPrior;
+  pSplit->pPrior = 0;
   pPrior->pNext = 0;
-  sqlite3ResolveOrderGroupBy(pParse, p, p->pOrderBy, "ORDER");
+  assert( p->pOrderBy == pOrderBy );
+  assert( pOrderBy!=0 || db->mallocFailed );
+  pPrior->pOrderBy = sqlite3ExprListDup(pParse->db, pOrderBy, 0);
+  if( p->pPrior==0 ){
+    sqlite3ResolveOrderGroupBy(pParse, p, p->pOrderBy, "ORDER");
+  }
   if( pPrior->pPrior==0 ){
     sqlite3ResolveOrderGroupBy(pParse, pPrior, pPrior->pOrderBy, "ORDER");
   }
@@ -3574,12 +3594,11 @@ static int multiSelectOrderBy(
 
   /* Reassembly the compound query so that it will be freed correctly
   ** by the calling function */
-  if( p->pPrior ){
-    sqlite3SelectDelete(db, p->pPrior);
+  if( pSplit->pPrior ){
+    sqlite3SelectDelete(db, pSplit->pPrior);
   }
-  p->pPrior = pPrior;
-  pPrior->pNext = p;
-
+  pSplit->pPrior = pPrior;
+  pPrior->pNext = pSplit;
   sqlite3ExprListDelete(db, pPrior->pOrderBy);
   pPrior->pOrderBy = 0;
 
@@ -4179,7 +4198,7 @@ static int flattenSubquery(
 
     if( pSrc->nSrc>1 ){
       if( pParse->nSelect>500 ) return 0;
-      aCsrMap = sqlite3DbMallocZero(db, (pParse->nTab+1)*sizeof(int));
+      aCsrMap = sqlite3DbMallocZero(db, ((i64)pParse->nTab+1)*sizeof(int));
       if( aCsrMap ) aCsrMap[0] = pParse->nTab;
     }
   }
@@ -4950,11 +4969,11 @@ static u8 minMaxQuery(sqlite3 *db, Expr *pFunc, ExprList **ppMinMax){
 ** does match this pattern, then a pointer to the Table object representing
 ** <tbl> is returned. Otherwise, NULL is returned.
 **
-** This routine a condition for the count optimization.  A correct answer
-** is obtained (though perhaps more slowly) if this routine returns NULL when
-** it could have returned a table pointer.  But returning the pointer when
-** NULL should have been returned can result in incorrect answers and/or
-** crashes.  So, when in doubt, return NULL.
+** This routine checks to see if it is safe to use the count optimization.
+** A correct answer is still obtained (though perhaps more slowly) if
+** this routine returns NULL when it could have returned a table pointer.
+** But returning the pointer when NULL should have been returned can
+** result in incorrect answers and/or crashes.  So, when in doubt, return NULL.
 */
 static Table *isSimpleCount(Select *p, AggInfo *pAggInfo){
   Table *pTab;
@@ -4977,6 +4996,7 @@ static Table *isSimpleCount(Select *p, AggInfo *pAggInfo){
   pExpr = p->pEList->a[0].pExpr;
   assert( pExpr!=0 );
   if( pExpr->op!=TK_AGG_FUNCTION ) return 0;
+  if( pExpr->pAggInfo!=pAggInfo ) return 0;
   if( (pAggInfo->aFunc[0].pFunc->funcFlags&SQLITE_FUNC_COUNT)==0 ) return 0;
   assert( pAggInfo->aFunc[0].pFExpr==pExpr );
   testcase( ExprHasProperty(pExpr, EP_Distinct) );
