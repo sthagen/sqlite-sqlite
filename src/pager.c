@@ -3900,8 +3900,7 @@ static int pager_wait_on_lock(Pager *pPager, int locktype){
 **      current database image, in pages, OR
 **
 **   b) if the page content were written at this time, it would not
-**      be necessary to write the current content out to the sub-journal
-**      (as determined by function subjRequiresPage()).
+**      be necessary to write the current content out to the sub-journal.
 **
 ** If the condition asserted by this function were not true, and the
 ** dirty page were to be discarded from the cache via the pagerStress()
@@ -3916,8 +3915,16 @@ static int pager_wait_on_lock(Pager *pPager, int locktype){
 */
 #if defined(SQLITE_DEBUG)
 static void assertTruncateConstraintCb(PgHdr *pPg){
+  Pager *pPager = pPg->pPager;
   assert( pPg->flags&PGHDR_DIRTY );
-  assert( !subjRequiresPage(pPg) || pPg->pgno<=pPg->pPager->dbSize );
+  if( pPg->pgno>pPager->dbSize ){      /* if (a) is false */
+    Pgno pgno = pPg->pgno;
+    int i;
+    for(i=0; i<pPg->pPager->nSavepoint; i++){
+      PagerSavepoint *p = &pPager->aSavepoint[i];
+      assert( p->nOrig<pgno || sqlite3BitvecTestNotNull(p->pInSavepoint,pgno) );
+    }
+  }
 }
 static void assertTruncateConstraint(Pager *pPager){
   sqlite3PcacheIterateDirty(pPager->pPCache, assertTruncateConstraintCb);
@@ -5258,7 +5265,7 @@ int sqlite3PagerSharedLock(Pager *pPager){
       ** may mean that the pager was in the error-state when this
       ** function was called and the journal file does not exist.
       */
-      if( !isOpen(pPager->jfd) ){
+      if( !isOpen(pPager->jfd) && pPager->journalMode!=PAGER_JOURNALMODE_OFF ){
         sqlite3_vfs * const pVfs = pPager->pVfs;
         int bExists;              /* True if journal file exists */
         rc = sqlite3OsAccess(
@@ -7265,12 +7272,12 @@ int sqlite3PagerSetJournalMode(Pager *pPager, int eMode){
   u8 eOld = pPager->journalMode;    /* Prior journalmode */
 
   /* The eMode parameter is always valid */
-  assert(      eMode==PAGER_JOURNALMODE_DELETE
-            || eMode==PAGER_JOURNALMODE_TRUNCATE
-            || eMode==PAGER_JOURNALMODE_PERSIST
-            || eMode==PAGER_JOURNALMODE_OFF 
-            || eMode==PAGER_JOURNALMODE_WAL 
-            || eMode==PAGER_JOURNALMODE_MEMORY );
+  assert(      eMode==PAGER_JOURNALMODE_DELETE    /* 0 */
+            || eMode==PAGER_JOURNALMODE_PERSIST   /* 1 */
+            || eMode==PAGER_JOURNALMODE_OFF       /* 2 */
+            || eMode==PAGER_JOURNALMODE_TRUNCATE  /* 3 */
+            || eMode==PAGER_JOURNALMODE_MEMORY    /* 4 */
+            || eMode==PAGER_JOURNALMODE_WAL       /* 5 */ );
 
   /* This routine is only called from the OP_JournalMode opcode, and
   ** the logic there will never allow a temporary file to be changed
@@ -7307,7 +7314,6 @@ int sqlite3PagerSetJournalMode(Pager *pPager, int eMode){
 
     assert( isOpen(pPager->fd) || pPager->exclusiveMode );
     if( !pPager->exclusiveMode && (eOld & 5)==1 && (eMode & 1)==0 ){
-
       /* In this case we would like to delete the journal file. If it is
       ** not possible, then that is not a problem. Deleting the journal file
       ** here is an optimization only.
