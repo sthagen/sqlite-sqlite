@@ -1575,6 +1575,9 @@ static void generateSortTail(
 
   iTab = pSort->iECursor;
   if( eDest==SRT_Output || eDest==SRT_Coroutine || eDest==SRT_Mem ){
+    if( eDest==SRT_Mem && p->iOffset ){
+      sqlite3VdbeAddOp2(v, OP_Null, 0, pDest->iSdst);
+    }
     regRowid = 0;
     regRow = pDest->iSdst;
   }else{
@@ -3433,6 +3436,7 @@ static int multiSelectOrderBy(
     for(i=2; i<nSelect; i+=2){ pSplit = pSplit->pPrior; }
   }
   pPrior = pSplit->pPrior;
+  assert( pPrior!=0 );
   pSplit->pPrior = 0;
   pPrior->pNext = 0;
   assert( p->pOrderBy == pOrderBy );
