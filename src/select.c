@@ -21,7 +21,7 @@
 */
 typedef struct DistinctCtx DistinctCtx;
 struct DistinctCtx {
-  u8 isTnct;      /* True if the DISTINCT keyword is present */
+  u8 isTnct;      /* 0: Not distinct. 1: DISTICT  2: DISTINCT and ORDER BY */
   u8 eTnctType;   /* One of the WHERE_DISTINCT_* operators */
   int tabTnct;    /* Ephemeral table used for DISTINCT processing */
   int addrTnct;   /* Address of OP_OpenEphemeral opcode for tabTnct */
@@ -354,14 +354,14 @@ static void addWhereTerm(
     ExprSetProperty(pEq, EP_FromJoin);
     assert( !ExprHasProperty(pEq, EP_TokenOnly|EP_Reduced) );
     ExprSetVVAProperty(pEq, EP_NoReduce);
-    pEq->iRightJoinTable = pE2->iTable;
+    pEq->w.iRightJoinTable = pE2->iTable;
   }
   *ppWhere = sqlite3ExprAnd(pParse, *ppWhere, pEq);
 }
 
 /*
 ** Set the EP_FromJoin property on all terms of the given expression.
-** And set the Expr.iRightJoinTable to iTable for every term in the
+** And set the Expr.w.iRightJoinTable to iTable for every term in the
 ** expression.
 **
 ** The EP_FromJoin property is used on terms of an expression to tell
@@ -371,8 +371,8 @@ static void addWhereTerm(
 ** WHERE clause during join processing but we need to remember that they
 ** originated in the ON or USING clause.
 **
-** The Expr.iRightJoinTable tells the WHERE clause processing that the
-** expression depends on table iRightJoinTable even if that table is not
+** The Expr.w.iRightJoinTable tells the WHERE clause processing that the
+** expression depends on table w.iRightJoinTable even if that table is not
 ** explicitly mentioned in the expression.  That information is needed
 ** for cases like this:
 **
@@ -390,7 +390,7 @@ void sqlite3SetJoinExpr(Expr *p, int iTable){
     ExprSetProperty(p, EP_FromJoin);
     assert( !ExprHasProperty(p, EP_TokenOnly|EP_Reduced) );
     ExprSetVVAProperty(p, EP_NoReduce);
-    p->iRightJoinTable = iTable;
+    p->w.iRightJoinTable = iTable;
     if( p->op==TK_FUNCTION ){
       assert( ExprUseXList(p) );
       if( p->x.pList ){
@@ -406,7 +406,7 @@ void sqlite3SetJoinExpr(Expr *p, int iTable){
 }
 
 /* Undo the work of sqlite3SetJoinExpr(). In the expression p, convert every
-** term that is marked with EP_FromJoin and iRightJoinTable==iTable into
+** term that is marked with EP_FromJoin and w.iRightJoinTable==iTable into
 ** an ordinary term that omits the EP_FromJoin mark.
 **
 ** This happens when a LEFT JOIN is simplified into an ordinary JOIN.
@@ -414,7 +414,7 @@ void sqlite3SetJoinExpr(Expr *p, int iTable){
 static void unsetJoinExpr(Expr *p, int iTable){
   while( p ){
     if( ExprHasProperty(p, EP_FromJoin)
-     && (iTable<0 || p->iRightJoinTable==iTable) ){
+     && (iTable<0 || p->w.iRightJoinTable==iTable) ){
       ExprClearProperty(p, EP_FromJoin);
     }
     if( p->op==TK_COLUMN && p->iTable==iTable ){
@@ -468,7 +468,7 @@ static int sqliteProcessJoin(Parse *pParse, Select *p){
     ** every column that the two tables have in common.
     */
     if( pRight->fg.jointype & JT_NATURAL ){
-      if( pRight->pOn || pRight->pUsing ){
+      if( pRight->fg.isUsing || pRight->u3.pOn ){
         sqlite3ErrorMsg(pParse, "a NATURAL join may not have "
            "an ON or USING clause", 0);
         return 1;
@@ -487,23 +487,6 @@ static int sqliteProcessJoin(Parse *pParse, Select *p){
       }
     }
 
-    /* Disallow both ON and USING clauses in the same join
-    */
-    if( pRight->pOn && pRight->pUsing ){
-      sqlite3ErrorMsg(pParse, "cannot have both ON and USING "
-        "clauses in the same join");
-      return 1;
-    }
-
-    /* Add the ON clause to the end of the WHERE clause, connected by
-    ** an AND operator.
-    */
-    if( pRight->pOn ){
-      if( isOuter ) sqlite3SetJoinExpr(pRight->pOn, pRight->iCursor);
-      p->pWhere = sqlite3ExprAnd(pParse, p->pWhere, pRight->pOn);
-      pRight->pOn = 0;
-    }
-
     /* Create extra terms on the WHERE clause for each column named
     ** in the USING clause.  Example: If the two tables to be joined are 
     ** A and B and the USING clause names X, Y, and Z, then add this
@@ -511,8 +494,9 @@ static int sqliteProcessJoin(Parse *pParse, Select *p){
     ** Report an error if any column mentioned in the USING clause is
     ** not contained in both tables to be joined.
     */
-    if( pRight->pUsing ){
-      IdList *pList = pRight->pUsing;
+    if( pRight->fg.isUsing ){
+      IdList *pList = pRight->u3.pUsing;
+      assert( pList!=0 );
       for(j=0; j<pList->nId; j++){
         char *zName;     /* Name of the term in the USING clause */
         int iLeft;       /* Table on the left with matching column name */
@@ -531,6 +515,15 @@ static int sqliteProcessJoin(Parse *pParse, Select *p){
         addWhereTerm(pParse, pSrc, iLeft, iLeftCol, i+1, iRightCol,
                      isOuter, &p->pWhere);
       }
+    }
+
+    /* Add the ON clause to the end of the WHERE clause, connected by
+    ** an AND operator.
+    */
+    else if( pRight->u3.pOn ){
+      if( isOuter ) sqlite3SetJoinExpr(pRight->u3.pOn, pRight->iCursor);
+      p->pWhere = sqlite3ExprAnd(pParse, p->pWhere, pRight->u3.pOn);
+      pRight->u3.pOn = 0;
     }
   }
   return 0;
@@ -2623,7 +2616,7 @@ static int multiSelectOrderBy(
 ** The "LIMIT of exactly 1" case of condition (1) comes about when a VALUES
 ** clause occurs within scalar expression (ex: "SELECT (VALUES(1),(2),(3))").
 ** The sqlite3CodeSubselect will have added the LIMIT 1 clause in tht case.
-** Since the limit is exactly 1, we only need to evalutes the left-most VALUES.
+** Since the limit is exactly 1, we only need to evaluate the left-most VALUES.
 */
 static int multiSelectValues(
   Parse *pParse,        /* Parsing context */
@@ -3648,9 +3641,9 @@ static Expr *substExpr(
 ){
   if( pExpr==0 ) return 0;
   if( ExprHasProperty(pExpr, EP_FromJoin)
-   && pExpr->iRightJoinTable==pSubst->iTable
+   && pExpr->w.iRightJoinTable==pSubst->iTable
   ){
-    pExpr->iRightJoinTable = pSubst->iNewTable;
+    pExpr->w.iRightJoinTable = pSubst->iNewTable;
   }
   if( pExpr->op==TK_COLUMN
    && pExpr->iTable==pSubst->iTable
@@ -3689,7 +3682,7 @@ static Expr *substExpr(
           ExprSetProperty(pNew, EP_CanBeNull);
         }
         if( ExprHasProperty(pExpr,EP_FromJoin) ){
-          sqlite3SetJoinExpr(pNew, pExpr->iRightJoinTable);
+          sqlite3SetJoinExpr(pNew, pExpr->w.iRightJoinTable);
         }
         sqlite3ExprDelete(db, pExpr);
         pExpr = pNew;
@@ -3854,7 +3847,7 @@ static int renumberCursorsCb(Walker *pWalker, Expr *pExpr){
     renumberCursorDoMapping(pWalker, &pExpr->iTable);
   }
   if( ExprHasProperty(pExpr, EP_FromJoin) ){
-    renumberCursorDoMapping(pWalker, &pExpr->iRightJoinTable);
+    renumberCursorDoMapping(pWalker, &pExpr->w.iRightJoinTable);
   }
   return WRC_Continue;
 }
@@ -4222,7 +4215,7 @@ static int flattenSubquery(
   pSubitem->zName = 0;
   pSubitem->zAlias = 0;
   pSubitem->pSelect = 0;
-  assert( pSubitem->pOn==0 );
+  assert( pSubitem->fg.isUsing!=0 || pSubitem->u3.pOn==0 );
 
   /* If the sub-query is a compound SELECT statement, then (by restrictions
   ** 17 and 18 above) it must be a UNION ALL and the parent query must 
@@ -4366,9 +4359,10 @@ static int flattenSubquery(
     ** outer query.
     */
     for(i=0; i<nSubSrc; i++){
-      sqlite3IdListDelete(db, pSrc->a[i+iFrom].pUsing);
-      assert( pSrc->a[i+iFrom].fg.isTabFunc==0 );
-      pSrc->a[i+iFrom] = pSubSrc->a[i];
+      SrcItem *pItem = &pSrc->a[i+iFrom];
+      if( pItem->fg.isUsing ) sqlite3IdListDelete(db, pItem->u3.pUsing);
+      assert( pItem->fg.isTabFunc==0 );
+      *pItem = pSubSrc->a[i];
       iNewParent = pSubSrc->a[i].iCursor;
       memset(&pSubSrc->a[i], 0, sizeof(pSubSrc->a[i]));
     }
@@ -4457,8 +4451,8 @@ static int flattenSubquery(
   sqlite3WalkSelect(&w,pSub1);
   sqlite3SelectDelete(db, pSub1);
 
-#if SELECTTRACE_ENABLED
-  if( sqlite3SelectTrace & 0x100 ){
+#if TREETRACE_ENABLED
+  if( sqlite3TreeTrace & 0x100 ){
     SELECTTRACE(0x100,pParse,p,("After flattening:\n"));
     sqlite3TreeViewSelect(0, p, 0);
   }
@@ -4864,11 +4858,13 @@ static int pushDownWhereTerms(
   }
   if( isLeftJoin
    && (ExprHasProperty(pWhere,EP_FromJoin)==0
-         || pWhere->iRightJoinTable!=iCursor)
+         || pWhere->w.iRightJoinTable!=iCursor)
   ){
     return 0; /* restriction (4) */
   }
-  if( ExprHasProperty(pWhere,EP_FromJoin) && pWhere->iRightJoinTable!=iCursor ){
+  if( ExprHasProperty(pWhere,EP_FromJoin)
+   && pWhere->w.iRightJoinTable!=iCursor 
+  ){
     return 0; /* restriction (5) */
   }
   if( sqlite3ExprIsTableConstant(pWhere, iCursor) ){
@@ -5090,7 +5086,7 @@ static int convertCompoundSelectToSubquery(Walker *pWalker, Select *p){
   pNew = sqlite3DbMallocZero(db, sizeof(*pNew) );
   if( pNew==0 ) return WRC_Abort;
   memset(&dummy, 0, sizeof(dummy));
-  pNewSrc = sqlite3SrcListAppendFromTerm(pParse,0,0,0,&dummy,pNew,0,0);
+  pNewSrc = sqlite3SrcListAppendFromTerm(pParse,0,0,0,&dummy,pNew,0);
   if( pNewSrc==0 ) return WRC_Abort;
   *pNew = *p;
   p->pSrc = pNewSrc;
@@ -5701,7 +5697,9 @@ static int selectExpander(Walker *pWalker, Select *p){
                 ** table to the right of the join */
                 continue;
               }
-              if( sqlite3IdListIndex(pFrom->pUsing, zName)>=0 ){
+              if( pFrom->fg.isUsing
+               && sqlite3IdListIndex(pFrom->u3.pUsing, zName)>=0
+              ){
                 /* In a join with a USING clause, omit columns in the
                 ** using clause from the table on the right. */
                 continue;
@@ -6155,8 +6153,8 @@ static void havingToWhere(Parse *pParse, Select *p){
   sWalker.xExprCallback = havingToWhereExprCb;
   sWalker.u.pSelect = p;
   sqlite3WalkExpr(&sWalker, p->pHaving);
-#if SELECTTRACE_ENABLED
-  if( sWalker.eCode && (sqlite3SelectTrace & 0x100)!=0 ){
+#if TREETRACE_ENABLED
+  if( sWalker.eCode && (sqlite3TreeTrace & 0x100)!=0 ){
     SELECTTRACE(0x100,pParse,p,("Move HAVING terms into WHERE:\n"));
     sqlite3TreeViewSelect(0, p, 0);
   }
@@ -6288,8 +6286,8 @@ static int countOfViewOptimization(Parse *pParse, Select *p){
   p->pEList->a[0].pExpr = pExpr;
   p->selFlags &= ~SF_Aggregate;
 
-#if SELECTTRACE_ENABLED
-  if( sqlite3SelectTrace & 0x400 ){
+#if TREETRACE_ENABLED
+  if( sqlite3TreeTrace & 0x400 ){
     SELECTTRACE(0x400,pParse,p,("After count-of-view optimization:\n"));
     sqlite3TreeViewSelect(0, p, 0);
   }
@@ -6342,10 +6340,14 @@ int sqlite3Select(
   }
   assert( db->mallocFailed==0 );
   if( sqlite3AuthCheck(pParse, SQLITE_SELECT, 0, 0, 0) ) return 1;
-#if SELECTTRACE_ENABLED
+#if TREETRACE_ENABLED
   SELECTTRACE(1,pParse,p, ("begin processing:\n", pParse->addrExplain));
-  if( sqlite3SelectTrace & 0x100 ){
-    sqlite3TreeViewSelect(0, p, 0);
+  if( sqlite3TreeTrace & 0x10100 ){
+    if( (sqlite3TreeTrace & 0x10001)==0x10000 ){
+      sqlite3TreeViewLine(0, "In sqlite3Select() at %s:%d",
+                           __FILE__, __LINE__);
+    }
+    sqlite3ShowSelect(p);
   }
 #endif
 
@@ -6359,9 +6361,9 @@ int sqlite3Select(
            pDest->eDest==SRT_DistQueue  || pDest->eDest==SRT_DistFifo );
     /* All of these destinations are also able to ignore the ORDER BY clause */
     if( p->pOrderBy ){
-#if SELECTTRACE_ENABLED
+#if TREETRACE_ENABLED
       SELECTTRACE(1,pParse,p, ("dropping superfluous ORDER BY:\n"));
-      if( sqlite3SelectTrace & 0x100 ){
+      if( sqlite3TreeTrace & 0x100 ){
         sqlite3TreeViewExprList(0, p->pOrderBy, 0, "ORDERBY");
       }
 #endif    
@@ -6380,8 +6382,8 @@ int sqlite3Select(
   }
   assert( db->mallocFailed==0 );
   assert( p->pEList!=0 );
-#if SELECTTRACE_ENABLED
-  if( sqlite3SelectTrace & 0x104 ){
+#if TREETRACE_ENABLED
+  if( sqlite3TreeTrace & 0x104 ){
     SELECTTRACE(0x104,pParse,p, ("after name resolution:\n"));
     sqlite3TreeViewSelect(0, p, 0);
   }
@@ -6425,8 +6427,8 @@ int sqlite3Select(
     assert( pParse->nErr );
     goto select_end;
   }
-#if SELECTTRACE_ENABLED
-  if( p->pWin && (sqlite3SelectTrace & 0x108)!=0 ){
+#if TREETRACE_ENABLED
+  if( p->pWin && (sqlite3TreeTrace & 0x108)!=0 ){
     SELECTTRACE(0x104,pParse,p, ("after window rewrite:\n"));
     sqlite3TreeViewSelect(0, p, 0);
   }
@@ -6564,9 +6566,9 @@ int sqlite3Select(
   */
   if( p->pPrior ){
     rc = multiSelect(pParse, p, pDest);
-#if SELECTTRACE_ENABLED
+#if TREETRACE_ENABLED
     SELECTTRACE(0x1,pParse,p,("end compound-select processing\n"));
-    if( (sqlite3SelectTrace & 0x2000)!=0 && ExplainQueryPlanParent(pParse)==0 ){
+    if( (sqlite3TreeTrace & 0x2000)!=0 && ExplainQueryPlanParent(pParse)==0 ){
       sqlite3TreeViewSelect(0, p, 0);
     }
 #endif
@@ -6585,8 +6587,8 @@ int sqlite3Select(
    && OptimizationEnabled(db, SQLITE_PropagateConst)
    && propagateConstants(pParse, p)
   ){
-#if SELECTTRACE_ENABLED
-    if( sqlite3SelectTrace & 0x100 ){
+#if TREETRACE_ENABLED
+    if( sqlite3TreeTrace & 0x100 ){
       SELECTTRACE(0x100,pParse,p,("After constant propagation:\n"));
       sqlite3TreeViewSelect(0, p, 0);
     }
@@ -6665,8 +6667,8 @@ int sqlite3Select(
      && pushDownWhereTerms(pParse, pSub, p->pWhere, pItem->iCursor,
                            (pItem->fg.jointype & JT_OUTER)!=0)
     ){
-#if SELECTTRACE_ENABLED
-      if( sqlite3SelectTrace & 0x100 ){
+#if TREETRACE_ENABLED
+      if( sqlite3TreeTrace & 0x100 ){
         SELECTTRACE(0x100,pParse,p,
             ("After WHERE-clause push-down into subquery %d:\n", pSub->selId));
         sqlite3TreeViewSelect(0, p, 0);
@@ -6784,8 +6786,8 @@ int sqlite3Select(
   pHaving = p->pHaving;
   sDistinct.isTnct = (p->selFlags & SF_Distinct)!=0;
 
-#if SELECTTRACE_ENABLED
-  if( sqlite3SelectTrace & 0x400 ){
+#if TREETRACE_ENABLED
+  if( sqlite3TreeTrace & 0x400 ){
     SELECTTRACE(0x400,pParse,p,("After all FROM-clause analysis:\n"));
     sqlite3TreeViewSelect(0, p, 0);
   }
@@ -6819,9 +6821,10 @@ int sqlite3Select(
     ** the sDistinct.isTnct is still set.  Hence, isTnct represents the
     ** original setting of the SF_Distinct flag, not the current setting */
     assert( sDistinct.isTnct );
+    sDistinct.isTnct = 2;
 
-#if SELECTTRACE_ENABLED
-    if( sqlite3SelectTrace & 0x400 ){
+#if TREETRACE_ENABLED
+    if( sqlite3TreeTrace & 0x400 ){
       SELECTTRACE(0x400,pParse,p,("Transform DISTINCT into GROUP BY:\n"));
       sqlite3TreeViewSelect(0, p, 0);
     }
@@ -7073,8 +7076,8 @@ int sqlite3Select(
     }
     pAggInfo->mxReg = pParse->nMem;
     if( db->mallocFailed ) goto select_end;
-#if SELECTTRACE_ENABLED
-    if( sqlite3SelectTrace & 0x400 ){
+#if TREETRACE_ENABLED
+    if( sqlite3TreeTrace & 0x400 ){
       int ii;
       SELECTTRACE(0x400,pParse,p,("After aggregate analysis %p:\n", pAggInfo));
       sqlite3TreeViewSelect(0, p, 0);
@@ -7162,7 +7165,8 @@ int sqlite3Select(
       sqlite3VdbeAddOp2(v, OP_Gosub, regReset, addrReset);
       SELECTTRACE(1,pParse,p,("WhereBegin\n"));
       pWInfo = sqlite3WhereBegin(pParse, pTabList, pWhere, pGroupBy, pDistinct,
-          0, (WHERE_GROUPBY|(orderByGrp ? WHERE_SORTBYGROUP : 0)|distFlag), 0
+          0, (sDistinct.isTnct==2 ? WHERE_DISTINCTBY : WHERE_GROUPBY) 
+          |  (orderByGrp ? WHERE_SORTBYGROUP : 0) | distFlag, 0
       );
       if( pWInfo==0 ){
         sqlite3ExprListDelete(db, pDistinct);
@@ -7344,7 +7348,7 @@ int sqlite3Select(
       VdbeComment((v, "indicate accumulator empty"));
       sqlite3VdbeAddOp1(v, OP_Return, regReset);
 
-      if( eDist!=WHERE_DISTINCT_NOOP ){
+      if( distFlag!=0 && eDist!=WHERE_DISTINCT_NOOP ){
         struct AggInfo_func *pF = &pAggInfo->aFunc[0];
         fixDistinctOpenEph(pParse, eDist, pF->iDistinct, pF->iDistAddr);
       }
@@ -7536,9 +7540,9 @@ select_end:
   }
 #endif
 
-#if SELECTTRACE_ENABLED
+#if TREETRACE_ENABLED
   SELECTTRACE(0x1,pParse,p,("end processing\n"));
-  if( (sqlite3SelectTrace & 0x2000)!=0 && ExplainQueryPlanParent(pParse)==0 ){
+  if( (sqlite3TreeTrace & 0x2000)!=0 && ExplainQueryPlanParent(pParse)==0 ){
     sqlite3TreeViewSelect(0, p, 0);
   }
 #endif

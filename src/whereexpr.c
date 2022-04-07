@@ -422,7 +422,7 @@ static int isAuxiliaryVtabOperator(
       assert( pVtab!=0 );
       assert( pVtab->pModule!=0 );
       assert( !ExprHasProperty(pExpr, EP_IntValue) );
-       pMod = (sqlite3_module *)pVtab->pModule;
+      pMod = (sqlite3_module *)pVtab->pModule;
       if( pMod->xFindFunction!=0 ){
         i = pMod->xFindFunction(pVtab,2, pExpr->u.zToken, &xNotUsed, &pNotUsed);
         if( i>=SQLITE_INDEX_CONSTRAINT_FUNCTION ){
@@ -466,7 +466,7 @@ static int isAuxiliaryVtabOperator(
 static void transferJoinMarkings(Expr *pDerived, Expr *pBase){
   if( pDerived ){
     pDerived->flags |= pBase->flags & EP_FromJoin;
-    pDerived->iRightJoinTable = pBase->iRightJoinTable;
+    pDerived->w.iRightJoinTable = pBase->w.iRightJoinTable;
   }
 }
 
@@ -951,7 +951,9 @@ static Bitmask exprSelectUsage(WhereMaskSet *pMaskSet, Select *pS){
       int i;
       for(i=0; i<pSrc->nSrc; i++){
         mask |= exprSelectUsage(pMaskSet, pSrc->a[i].pSelect);
-        mask |= sqlite3WhereExprUsage(pMaskSet, pSrc->a[i].pOn);
+        if( pSrc->a[i].fg.isUsing==0 ){
+          mask |= sqlite3WhereExprUsage(pMaskSet, pSrc->a[i].u3.pOn);
+        }
         if( pSrc->a[i].fg.isTabFunc ){
           mask |= sqlite3WhereExprListUsage(pMaskSet, pSrc->a[i].u1.pFuncArg);
         }
@@ -1111,7 +1113,7 @@ static void exprAnalyze(
 #endif
 
   if( ExprHasProperty(pExpr, EP_FromJoin) ){
-    Bitmask x = sqlite3WhereGetMask(pMaskSet, pExpr->iRightJoinTable);
+    Bitmask x = sqlite3WhereGetMask(pMaskSet, pExpr->w.iRightJoinTable);
     prereqAll |= x;
     extraRight = x-1;  /* ON clause terms may not be used with an index
                        ** on left table of a LEFT JOIN.  Ticket #3015 */
@@ -1399,7 +1401,7 @@ static void exprAnalyze(
 
       pNew = sqlite3PExpr(pParse, pExpr->op, pLeft, pRight);
       transferJoinMarkings(pNew, pExpr);
-      idxNew = whereClauseInsert(pWC, pNew, TERM_DYNAMIC);
+      idxNew = whereClauseInsert(pWC, pNew, TERM_DYNAMIC|TERM_SLICE);
       exprAnalyze(pSrc, pWC, idxNew);
     }
     pTerm = &pWC->a[idxTerm];
@@ -1429,7 +1431,7 @@ static void exprAnalyze(
     int i;
     for(i=0; i<sqlite3ExprVectorSize(pExpr->pLeft); i++){
       int idxNew;
-      idxNew = whereClauseInsert(pWC, pExpr, TERM_VIRTUAL);
+      idxNew = whereClauseInsert(pWC, pExpr, TERM_VIRTUAL|TERM_SLICE);
       pWC->a[idxNew].u.x.iField = i+1;
       exprAnalyze(pSrc, pWC, idxNew);
       markTermAsChild(pWC, idxNew, idxTerm);
@@ -1462,7 +1464,7 @@ static void exprAnalyze(
             0, sqlite3ExprDup(db, pRight, 0));
         if( ExprHasProperty(pExpr, EP_FromJoin) && pNewExpr ){
           ExprSetProperty(pNewExpr, EP_FromJoin);
-          pNewExpr->iRightJoinTable = pExpr->iRightJoinTable;
+          pNewExpr->w.iRightJoinTable = pExpr->w.iRightJoinTable;
         }
         idxNew = whereClauseInsert(pWC, pNewExpr, TERM_VIRTUAL|TERM_DYNAMIC);
         testcase( idxNew==0 );
@@ -1536,7 +1538,7 @@ void sqlite3WhereSplit(WhereClause *pWC, Expr *pExpr, u8 op){
 ** TK_INTEGER so that it will be available to sqlite3_vtab_rhs_value().
 ** If not, then it codes as a TK_REGISTER expression.
 */
-void whereAddLimitExpr(
+static void whereAddLimitExpr(
   WhereClause *pWC,   /* Add the constraint to this WHERE clause */
   int iReg,           /* Register that will hold value of the limit/offset */
   Expr *pExpr,        /* Expression that defines the limit/offset */
@@ -1616,7 +1618,7 @@ void sqlite3WhereAddLimit(WhereClause *pWC, Select *p){
       for(ii=0; ii<pOrderBy->nExpr; ii++){
         Expr *pExpr = pOrderBy->a[ii].pExpr;
         if( pExpr->op!=TK_COLUMN ) return;
-        if( NEVER(pExpr->iTable!=iCsr) ) return;
+        if( pExpr->iTable!=iCsr ) return;
         if( pOrderBy->a[ii].sortFlags & KEYINFO_ORDER_BIGNULL ) return;
       }
     }

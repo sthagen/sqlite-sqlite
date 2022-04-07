@@ -570,7 +570,7 @@ selectnowith(A) ::= selectnowith(A) multiselect_op(Y) oneselect(Z).  {
     Token x;
     x.n = 0;
     parserDoubleLinkSelect(pParse, pRhs);
-    pFrom = sqlite3SrcListAppendFromTerm(pParse,0,0,0,&x,pRhs,0,0);
+    pFrom = sqlite3SrcListAppendFromTerm(pParse,0,0,0,&x,pRhs,0);
     pRhs = sqlite3SelectNew(pParse,0,pFrom,0,0,0,0,0,0);
   }
   if( pRhs ){
@@ -659,7 +659,7 @@ selcollist(A) ::= sclp(A) scanpt STAR. {
 }
 selcollist(A) ::= sclp(A) scanpt nm(X) DOT STAR. {
   Expr *pRight = sqlite3PExpr(pParse, TK_ASTERISK, 0, 0);
-  Expr *pLeft = sqlite3ExprAlloc(pParse->db, TK_ID, &X, 1);
+  Expr *pLeft = tokenExpr(pParse, TK_ID, X);
   Expr *pDot = sqlite3PExpr(pParse, TK_DOT, pLeft, pRight);
   A = sqlite3ExprListAppend(pParse,A, pDot);
 }
@@ -695,27 +695,26 @@ stl_prefix(A) ::= seltablist(A) joinop(Y).    {
    if( ALWAYS(A && A->nSrc>0) ) A->a[A->nSrc-1].fg.jointype = (u8)Y;
 }
 stl_prefix(A) ::= .                           {A = 0;}
-seltablist(A) ::= stl_prefix(A) nm(Y) dbnm(D) as(Z) indexed_opt(I)
-                  on_opt(N) using_opt(U). {
-  A = sqlite3SrcListAppendFromTerm(pParse,A,&Y,&D,&Z,0,N,U);
+seltablist(A) ::= stl_prefix(A) nm(Y) dbnm(D) as(Z) on_using(N). {
+  A = sqlite3SrcListAppendFromTerm(pParse,A,&Y,&D,&Z,0,&N);
+}
+seltablist(A) ::= stl_prefix(A) nm(Y) dbnm(D) as(Z) indexed_by(I) on_using(N). {
+  A = sqlite3SrcListAppendFromTerm(pParse,A,&Y,&D,&Z,0,&N);
   sqlite3SrcListIndexedBy(pParse, A, &I);
 }
-seltablist(A) ::= stl_prefix(A) nm(Y) dbnm(D) LP exprlist(E) RP as(Z)
-                  on_opt(N) using_opt(U). {
-  A = sqlite3SrcListAppendFromTerm(pParse,A,&Y,&D,&Z,0,N,U);
+seltablist(A) ::= stl_prefix(A) nm(Y) dbnm(D) LP exprlist(E) RP as(Z) on_using(N). {
+  A = sqlite3SrcListAppendFromTerm(pParse,A,&Y,&D,&Z,0,&N);
   sqlite3SrcListFuncArgs(pParse, A, E);
 }
 %ifndef SQLITE_OMIT_SUBQUERY
-  seltablist(A) ::= stl_prefix(A) LP select(S) RP
-                    as(Z) on_opt(N) using_opt(U). {
-    A = sqlite3SrcListAppendFromTerm(pParse,A,0,0,&Z,S,N,U);
+  seltablist(A) ::= stl_prefix(A) LP select(S) RP as(Z) on_using(N). {
+    A = sqlite3SrcListAppendFromTerm(pParse,A,0,0,&Z,S,&N);
   }
-  seltablist(A) ::= stl_prefix(A) LP seltablist(F) RP
-                    as(Z) on_opt(N) using_opt(U). {
-    if( A==0 && Z.n==0 && N==0 && U==0 ){
+  seltablist(A) ::= stl_prefix(A) LP seltablist(F) RP as(Z) on_using(N). {
+    if( A==0 && Z.n==0 && N.pOn==0 && N.pUsing==0 ){
       A = F;
     }else if( F->nSrc==1 ){
-      A = sqlite3SrcListAppendFromTerm(pParse,A,0,0,&Z,0,N,U);
+      A = sqlite3SrcListAppendFromTerm(pParse,A,0,0,&Z,0,&N);
       if( A ){
         SrcItem *pNew = &A->a[A->nSrc-1];
         SrcItem *pOld = F->a;
@@ -736,7 +735,7 @@ seltablist(A) ::= stl_prefix(A) nm(Y) dbnm(D) LP exprlist(E) RP as(Z)
       Select *pSubquery;
       sqlite3SrcListShiftJoinType(F);
       pSubquery = sqlite3SelectNew(pParse,0,F,0,0,0,0,SF_NestedFrom,0);
-      A = sqlite3SrcListAppendFromTerm(pParse,A,0,0,&Z,pSubquery,N,U);
+      A = sqlite3SrcListAppendFromTerm(pParse,A,0,0,&Z,pSubquery,&N);
     }
   }
 %endif  SQLITE_OMIT_SUBQUERY
@@ -794,13 +793,14 @@ joinop(X) ::= JOIN_KW(A) nm(B) nm(C) JOIN.
 //
 //      INSERT INTO tab SELECT * FROM aaa JOIN bbb WHERE true ON CONFLICT ...
 //
-// The [AND] and [OR] precedence marks in the rules for on_opt cause the
+// The [AND] and [OR] precedence marks in the rules for on_using cause the
 // ON in this context to always be interpreted as belonging to the JOIN.
 //
-%type on_opt {Expr*}
-%destructor on_opt {sqlite3ExprDelete(pParse->db, $$);}
-on_opt(N) ::= ON expr(E).  {N = E;}
-on_opt(N) ::= .     [OR]   {N = 0;}
+%type on_using {OnOrUsing}
+//%destructor on_using {sqlite3ClearOnOrUsing(pParse->db, &$$);}
+on_using(N) ::= ON expr(E).            {N.pOn = E; N.pUsing = 0;}
+on_using(N) ::= USING LP idlist(L) RP. {N.pOn = 0; N.pUsing = L;}
+on_using(N) ::= .                 [OR] {N.pOn = 0; N.pUsing = 0;}
 
 // Note that this block abuses the Token type just a little. If there is
 // no "INDEXED BY" clause, the returned token is empty (z==0 && n==0). If
@@ -813,15 +813,11 @@ on_opt(N) ::= .     [OR]   {N = 0;}
 // recognizes and interprets this as a special case.
 //
 %type indexed_opt {Token}
+%type indexed_by  {Token}
 indexed_opt(A) ::= .                 {A.z=0; A.n=0;}
-indexed_opt(A) ::= INDEXED BY nm(X). {A = X;}
-indexed_opt(A) ::= NOT INDEXED.      {A.z=0; A.n=1;}
-
-%type using_opt {IdList*}
-%destructor using_opt {sqlite3IdListDelete(pParse->db, $$);}
-using_opt(U) ::= USING LP idlist(L) RP.  {U = L;}
-using_opt(U) ::= .                        {U = 0;}
-
+indexed_opt(A) ::= indexed_by(A).
+indexed_by(A)  ::= INDEXED BY nm(X). {A = X;}
+indexed_by(A)  ::= NOT INDEXED.      {A.z=0; A.n=1;}
 
 %type orderby_opt {ExprList*}
 %destructor orderby_opt {sqlite3ExprListDelete(pParse->db, $$);}
@@ -1025,10 +1021,7 @@ idlist(A) ::= nm(Y).
 
 %include {
 
-  /* Construct a new Expr object from a single identifier.  Use the
-  ** new Expr to populate pOut.  Set the span of pOut to be the identifier
-  ** that created the expression.
-  */
+  /* Construct a new Expr object from a single token */
   static Expr *tokenExpr(Parse *pParse, int op, Token t){
     Expr *p = sqlite3DbMallocRawNN(pParse->db, sizeof(Expr)+t.n+1);
     if( p ){
@@ -1048,6 +1041,7 @@ idlist(A) ::= nm(Y).
       p->u.zToken = (char*)&p[1];
       memcpy(p->u.zToken, t.z, t.n);
       p->u.zToken[t.n] = 0;
+      p->w.iOfst = (int)(t.z - pParse->zTail);
       if( sqlite3Isquote(p->u.zToken[0]) ){
         sqlite3DequoteExpr(p);
       }
@@ -1068,22 +1062,17 @@ expr(A) ::= LP expr(X) RP. {A = X;}
 expr(A) ::= id(X).          {A=tokenExpr(pParse,TK_ID,X); /*A-overwrites-X*/}
 expr(A) ::= JOIN_KW(X).     {A=tokenExpr(pParse,TK_ID,X); /*A-overwrites-X*/}
 expr(A) ::= nm(X) DOT nm(Y). {
-  Expr *temp1 = sqlite3ExprAlloc(pParse->db, TK_ID, &X, 1);
-  Expr *temp2 = sqlite3ExprAlloc(pParse->db, TK_ID, &Y, 1);
-  if( IN_RENAME_OBJECT ){
-    sqlite3RenameTokenMap(pParse, (void*)temp2, &Y);
-    sqlite3RenameTokenMap(pParse, (void*)temp1, &X);
-  }
+  Expr *temp1 = tokenExpr(pParse,TK_ID,X);
+  Expr *temp2 = tokenExpr(pParse,TK_ID,Y);
   A = sqlite3PExpr(pParse, TK_DOT, temp1, temp2);
 }
 expr(A) ::= nm(X) DOT nm(Y) DOT nm(Z). {
-  Expr *temp1 = sqlite3ExprAlloc(pParse->db, TK_ID, &X, 1);
-  Expr *temp2 = sqlite3ExprAlloc(pParse->db, TK_ID, &Y, 1);
-  Expr *temp3 = sqlite3ExprAlloc(pParse->db, TK_ID, &Z, 1);
+  Expr *temp1 = tokenExpr(pParse,TK_ID,X);
+  Expr *temp2 = tokenExpr(pParse,TK_ID,Y);
+  Expr *temp3 = tokenExpr(pParse,TK_ID,Z);
   Expr *temp4 = sqlite3PExpr(pParse, TK_DOT, temp2, temp3);
   if( IN_RENAME_OBJECT ){
-    sqlite3RenameTokenMap(pParse, (void*)temp3, &Z);
-    sqlite3RenameTokenMap(pParse, (void*)temp2, &Y);
+    sqlite3RenameTokenRemap(pParse, 0, temp1);
   }
   A = sqlite3PExpr(pParse, TK_DOT, temp1, temp4);
 }
@@ -1091,6 +1080,7 @@ term(A) ::= NULL|FLOAT|BLOB(X). {A=tokenExpr(pParse,@X,X); /*A-overwrites-X*/}
 term(A) ::= STRING(X).          {A=tokenExpr(pParse,@X,X); /*A-overwrites-X*/}
 term(A) ::= INTEGER(X). {
   A = sqlite3ExprAlloc(pParse->db, TK_INTEGER, &X, 1);
+  if( A ) A->w.iOfst = (int)(X.z - pParse->zTail);
 }
 expr(A) ::= VARIABLE(X).     {
   if( !(X.z[0]=='#' && sqlite3Isdigit(X.z[1])) ){
@@ -1593,7 +1583,7 @@ expr(A) ::= RAISE LP IGNORE RP.  {
   }
 }
 expr(A) ::= RAISE LP raisetype(T) COMMA nm(Z) RP.  {
-  A = sqlite3ExprAlloc(pParse->db, TK_RAISE, &Z, 1); 
+  A = sqlite3ExprAlloc(pParse->db, TK_RAISE, &Z, 1);
   if( A ) {
     A->affExpr = (char)T;
   }
