@@ -1231,7 +1231,7 @@ void sqlite3VdbeReleaseRegisters(
   u32 mask,            /* Mask of registers to NOT release */
   int bUndefine        /* If true, mark registers as undefined */
 ){
-  if( N==0 ) return;
+  if( N==0 || OptimizationDisabled(pParse->db, SQLITE_ReleaseReg) ) return;
   assert( pParse->pVdbe );
   assert( iFirst>=1 );
   assert( iFirst+N-1<=pParse->nMem );
@@ -1490,8 +1490,13 @@ char *sqlite3VdbeDisplayComment(
         if( c=='4' ){
           sqlite3_str_appendall(&x, zP4);
         }else if( c=='X' ){
-          sqlite3_str_appendall(&x, pOp->zComment);
+          if( pOp->zComment && pOp->zComment[0] ){
+            sqlite3_str_appendall(&x, pOp->zComment);
+          }else{
+            sqlite3_str_appendall(&x, zSynopsis+1);
+          }
           seenCom = 1;
+          break;
         }else{
           int v1 = translateP(c, pOp);
           int v2;
@@ -3549,7 +3554,7 @@ int SQLITE_NOINLINE sqlite3VdbeHandleMovedCursor(VdbeCursor *p){
 ** if need be.  Return any I/O error from the restore operation.
 */
 int sqlite3VdbeCursorRestore(VdbeCursor *p){
-  assert( p->eCurType==CURTYPE_BTREE );
+  assert( p->eCurType==CURTYPE_BTREE || IsNullCursor(p) );
   if( sqlite3BtreeCursorHasMoved(p->uc.pCursor) ){
     return sqlite3VdbeHandleMovedCursor(p);
   }
