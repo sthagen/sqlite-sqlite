@@ -4153,6 +4153,8 @@ static void renumberCursors(
 **  (27)  The subquery may not contain a FULL or RIGHT JOIN unless it
 **        is the first element of the parent query.
 **
+**  (28)  The subquery is not a MATERIALIZED CTE.
+**
 **
 ** In this routine, the "p" parameter is a pointer to the outer query.
 ** The subquery is p->pSrc->a[iFrom].  isAgg is true if the outer query
@@ -4275,6 +4277,9 @@ static int flattenSubquery(
   assert( pSubSrc->nSrc>0 );  /* True by restriction (7) */
   if( iFrom>0 && (pSubSrc->a[0].fg.jointype & JT_LTORJ)!=0 ){
     return 0;   /* Restriction (27) */
+  }
+  if( pSubitem->fg.isCte && pSubitem->u2.pCteUse->eM10d==M10d_Yes ){
+    return 0;       /* (28) */
   }
 
   /* Restriction (17): If the sub-query is a compound SELECT, then it must
@@ -5551,7 +5556,7 @@ int sqlite3ExpandSubquery(Parse *pParse, SrcItem *pFrom){
   if( pFrom->zAlias ){
     pTab->zName = sqlite3DbStrDup(pParse->db, pFrom->zAlias);
   }else{
-    pTab->zName = sqlite3MPrintf(pParse->db, "subquery_%u", pSel->selId);
+    pTab->zName = sqlite3MPrintf(pParse->db, "%!S", pFrom);
   }
   while( pSel->pPrior ){ pSel = pSel->pPrior; }
   sqlite3ColumnsFromExprList(pParse, pSel->pEList,&pTab->nCol,&pTab->aCol);
@@ -5804,25 +5809,27 @@ static int selectExpander(Walker *pWalker, Select *p){
           zTName = pE->pLeft->u.zToken;
         }
         for(i=0, pFrom=pTabList->a; i<pTabList->nSrc; i++, pFrom++){
-          Table *pTab = pFrom->pTab;
-          Select *pSub;
-          char *zTabName = pFrom->zAlias;
-          const char *zSchemaName = 0;
-          int iDb;
-          if( zTabName==0 ){
+          Table *pTab = pFrom->pTab;   /* Table for this data source */
+          ExprList *pNestedFrom;       /* Result-set of a nested FROM clause */
+          char *zTabName;              /* AS name for this data source */
+          const char *zSchemaName = 0; /* Schema name for this data source */
+          int iDb;                     /* Schema index for this data src */
+
+          if( (zTabName = pFrom->zAlias)==0 ){
             zTabName = pTab->zName;
           }
           if( db->mallocFailed ) break;
           assert( pFrom->fg.isNestedFrom == IsNestedFrom(pFrom->pSelect) );
           if( pFrom->fg.isNestedFrom ){
-            pSub = pFrom->pSelect;
-            assert( pSub->pEList!=0 );
-            assert( pSub->pEList->nExpr==pTab->nCol );
+            assert( pFrom->pSelect!=0 );
+            pNestedFrom = pFrom->pSelect->pEList;
+            assert( pNestedFrom!=0 );
+            assert( pNestedFrom->nExpr==pTab->nCol );
           }else{
-            pSub = 0;
             if( zTName && sqlite3StrICmp(zTName, zTabName)!=0 ){
               continue;
             }
+            pNestedFrom = 0;
             iDb = sqlite3SchemaToIndex(db, pTab->pSchema);
             zSchemaName = iDb>=0 ? db->aDb[iDb].zDbSName : "*";
           }
@@ -5831,8 +5838,9 @@ static int selectExpander(Walker *pWalker, Select *p){
             struct ExprList_item *pX; /* Newly added ExprList term */
 
             assert( zName );
-            if( zTName && pSub
-             && sqlite3MatchEName(&pSub->pEList->a[j], 0, zTName, 0)==0
+            if( zTName
+             && pNestedFrom
+             && sqlite3MatchEName(&pNestedFrom->a[j], 0, zTName, 0)==0
             ){
               continue;
             }
@@ -5885,8 +5893,8 @@ static int selectExpander(Walker *pWalker, Select *p){
             pX = &pNew->a[pNew->nExpr-1];
             assert( pX->zEName==0 );
             if( (selFlags & SF_NestedFrom)!=0 && !IN_RENAME_OBJECT ){
-              if( pSub ){
-                pX->zEName = sqlite3DbStrDup(db, pSub->pEList->a[j].zEName);
+              if( pNestedFrom ){
+                pX->zEName = sqlite3DbStrDup(db, pNestedFrom->a[j].zEName);
                 testcase( pX->zEName==0 );
               }else{
                 pX->zEName = sqlite3MPrintf(db, "%s.%s.%s",
