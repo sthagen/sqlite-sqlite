@@ -2847,7 +2847,7 @@ struct Expr {
                          ** TK_SELECT_COLUMN: column of the result vector */
   i16 iAgg;              /* Which entry in pAggInfo->aCol[] or ->aFunc[] */
   union {
-    int iJoin;             /* If EP_OuterON, the right table of the join */
+    int iJoin;             /* If EP_OuterON or EP_InnerON, the right table */
     int iOfst;             /* else: start of token from start of statement */
   } w;
   AggInfo *pAggInfo;     /* Used by TK_AGG_COLUMN and TK_AGG_FUNCTION */
@@ -5322,7 +5322,6 @@ const char *sqlite3JournalModename(int);
 #define IN_INDEX_NOOP_OK     0x0001  /* OK to return IN_INDEX_NOOP */
 #define IN_INDEX_MEMBERSHIP  0x0002  /* IN operator used for membership test */
 #define IN_INDEX_LOOP        0x0004  /* IN operator used as a loop */
-#define IN_INDEX_REUSE_CUR   0x0008  /* Reuse prior table cursor */
 int sqlite3FindInIndex(Parse *, Expr *, u32, int*, int*, int*);
 
 int sqlite3JournalOpen(sqlite3_vfs *, const char *, sqlite3_file *, int, int);
