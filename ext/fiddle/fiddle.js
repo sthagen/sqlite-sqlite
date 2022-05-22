@@ -159,8 +159,9 @@
             progressElement.remove();
             if(!text) spinnerElement.remove();
         }
-        if(text) statusElement.innerText = text;
-        else {
+        if(text){
+            statusElement.innerText = text;
+        }else{
             console.log("Finalizing status.");
             statusElement.remove();
             SF.clearMsgHandlers('module');
@@ -203,6 +204,14 @@
             if(sql) SF.dbExec(sql);
         },false);
 
+        /** To be called immediately before work is sent to the
+            worker.  Updates some UI elements. The 'working'/'end'
+            event will apply the inverse, undoing the bits this
+            function does.  This impl is not in the 'working'/'start'
+            event handler because that event is given to us
+            asynchronously _after_ we need to have performed this
+            work.
+        */
         const preStartWork = function f(){
             if(!f._){
                 const title = E('title');
@@ -230,7 +239,7 @@
 
         SF.addMsgHandler('working',function f(ev){
             if('start' === ev.data){
-                //btnShellExec.innerText = "Working..."; // forces layout reflow (annoying)
+                /* See notes in preStartWork(). */
             }else if('end' === ev.data){
                 preStartWork._.pageTitle.innerText = preStartWork._.pageTitleOrig;
                 btnShellExec.innerText = preStartWork._.btnLabel;
@@ -238,7 +247,7 @@
             }
         });
 
-        /* For each checkboxes with data-csstgt, set up a handler which
+        /* For each checkbox with data-csstgt, set up a handler which
            toggles the given CSS class on the element matching
            E(data-csstgt). */
         EAll('input[type=checkbox][data-csstgt]')

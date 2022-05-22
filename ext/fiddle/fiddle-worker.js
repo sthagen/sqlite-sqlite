@@ -14,6 +14,10 @@
   sqlite3 wasm module and offers access to the db via the Worker
   message-passing interface.
 
+  Forewarning: this API is still very much Under Construction and
+  subject to any number of changes as experience reveals what those
+  need to be.
+
   Because we can have only a single message handler, as opposed to an
   arbitrary number of discrete event listeners like with DOM elements,
   we have to define a lower-level message API. Messages abstractly
@@ -70,23 +74,23 @@
   Noting that it happens in Firefox as well as Chrome. Harmless but
   annoying.
 */
-
-const thisWorker = self;
+"use strict";
 
 const wMsg = (type,data)=>postMessage({type, data});
 
 self.onerror = function(/*message, source, lineno, colno, error*/) {
     const err = arguments[4];
     if(err && 'ExitStatus'==err.name){
+        /* This is relevant for the sqlite3 shell binding but not the
+           lower-level binding. */
         Module._isDead = true;
         Module.printErr("FATAL ERROR:", err.message);
         Module.printErr("Restarting the app requires reloading the page.");
-        //const taOutput = document.querySelector('#output');
-        //if(taOutput) taOutput.classList.add('error');
+        wMsg('error', err);
     }
     Module.setStatus('Exception thrown, see JavaScript console');
     Module.setStatus = function(text) {
-        if(text) console.error('[post-exception status] ' + text);
+        console.error('[post-exception status]', text);
     };
 };
 
@@ -138,4 +142,11 @@ self.onmessage = function(ev){
 };
 self.Module.setStatus('Downloading...');
 importScripts('fiddle-module.js')
-/* loads module and notifies, via Module.setStatus(), when it's done loading. */;
+/* loads the wasm module and notifies, via Module.setStatus() and
+   Module.onRuntimeInitialized(), when it's done loading.  The latter
+   is called _before_ the final call to Module.setStatus(). */;
+
+Module["onRuntimeInitialized"] = function onRuntimeInitialized() {
+    //console.log('onRuntimeInitialized');
+    //wMsg('module','done');
+};
