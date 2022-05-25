@@ -26,9 +26,6 @@
     };
 
     /* emscripten-related bits... */
-    const statusElement = E('#module-status');
-    const progressElement = E('#module-progress');
-    const spinnerElement = E('#module-spinner');
     self.Module = {
         /* ^^^ cannot declare that const because sqlite3.js
            (auto-generated) includes a decl for it and runs in this
@@ -37,31 +34,39 @@
         postRun: [],
         //onRuntimeInitialized: function(){},
         print: function(){
-            console.log(Array.prototype.slice.call(arguments));
+            console.log.apply(console, Array.prototype.slice.call(arguments));
         },
         printErr: function(){
-            console.error(Array.prototype.slice.call(arguments));
+            console.error.apply(console, Array.prototype.slice.call(arguments));
         },
         setStatus: function f(text){
-            if(!f.last) f.last = { time: Date.now(), text: '' };
-            if(text === f.last.text) return;
-            const m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
-            const now = Date.now();
-            if(m && now - f.last.time < 30) return; // if this is a progress update, skip it if too soon
-            f.last.time = now;
-            f.last.text = text;
-            if(m) {
-                text = m[1];
-                progressElement.value = parseInt(m[2])*100;
-                progressElement.max = parseInt(m[4])*100;
-                progressElement.hidden = false;
-                spinnerElement.hidden = false;
-            } else {
-                progressElement.remove();
-                if(!text) spinnerElement.remove();
+            if(!f.last){
+                f.last = { text: '', step: 0 };
+                f.ui = {
+                    status: E('#module-status'),
+                    progress: E('#module-progress'),
+                    spinner: E('#module-spinner')
+                };
             }
-            if(text) statusElement.innerText = text;
-            else statusElement.remove();
+            if(text === f.last.text) return;
+            f.last.text = text;
+            if(f.ui.progress){
+                f.ui.progress.value = f.last.step;
+                f.ui.progress.max = f.last.step + 1;
+            }
+            ++f.last.step;
+            if(text) {
+                f.ui.status.classList.remove('hidden');
+                f.ui.status.innerText = text;
+            }else{
+                if(f.ui.progress){
+                    f.ui.progress.remove();
+                    f.ui.spinner.remove();
+                    delete f.ui.progress;
+                    delete f.ui.spinner;
+                }
+                f.ui.status.classList.add('hidden');
+            }
         },
         totalDependencies: 0,
         monitorRunDependencies: function(left) {
@@ -71,16 +76,33 @@
                               + '/' + this.totalDependencies + ')')
                            : 'All downloads complete.');
         },
-        /* Loads sqlite3-api.js and calls the given callback (if
-           provided), passing it an object which contains the sqlite3
-           and SQLite3 modules. Whether this is synchronous or async
-           depends on whether it's run in the main thread or a
-           worker.*/
-        loadSqliteAPI: function(callback){
+        /**
+           Loads sqlite3-api.js and calls the given callback (if
+           provided), passing it an object:
+
+           {
+             api:sqlite3_c-like API wrapper,
+             SQLite3: OO wrapper
+           }
+
+           Whether this is synchronous or async depends on whether
+           it's run in the main thread (async) or a worker
+           (synchronous).
+
+           If called after the module has been loaded, it uses a
+           cached reference, noting that multiple async calls may end
+           up loading it multiple times.
+        */
+        loadSqliteAPI: function f(callback){
+            const namespace = self.Module;
+            if(namespace.sqlite3){
+                if(callback) callback(namespace.sqlite3);
+                return;
+            }
             const theScript = 'sqlite3-api.js';
             if(self.importScripts){/*worker*/
                 importScripts(theScript);
-                if(callback) callback(self.sqlite3);
+                if(callback) callback(namespace.sqlite3);
             }else{/*main thread*/
                 new Promise((resolve, reject) => {
                     const script = document.createElement('script');
@@ -90,65 +112,9 @@
                     script.async = true;
                     script.src = theScript;
                 }).then(() => {
-                    if(callback) callback({sqlite3:self.sqlite3,
-                                           SQLite3:self.SQLite3});
+                    if(callback) callback(namespace.sqlite3);
                 });
             }
-        }
-    };
-    
-    /**
-       Helpers for writing sqlite3-specific tests.
-    */
-    self.SqliteTester = {
-        /** Running total of the number of tests run via
-            this API. */
-        counter: 0,
-        /**
-           If expr is a function, it is called and its result
-           is returned, coerced to a bool, else expr, coerced to
-           a bool, is returned.
-        */
-        toBool: function(expr){
-            return (expr instanceof Function) ? !!expr() : !!expr;
-        },
-        /** abort() if expr is false. If expr is a function, it
-            is called and its result is evaluated.
-        */
-        assert: function(expr, msg){
-            ++this.counter;
-            if(!this.toBool(expr)) abort(msg || "Assertion failed.");
-            return this;
-        },
-        /** Identical to assert() but throws instead of calling
-            abort(). */
-        affirm: function(expr, msg){
-            ++this.counter;
-            if(!this.toBool(expr)) throw new Error(msg || "Affirmation failed.");
-            return this;
-        },
-        /** Calls f() and squelches any exception it throws. If it
-            does not throw, this function throws. */
-        mustThrow: function(f, msg){
-            ++this.counter;
-            let err;
-            try{ f(); } catch(e){err=e;}
-            if(!err) throw new Error(msg || "Expected exception.");
-            return this;
-        },
-        /** Throws if expr is truthy or expr is a function and expr()
-            returns truthy. */
-        throwIf: function(expr, msg){
-            ++this.counter;
-            if(this.toBool(expr)) throw new Error(msg || "throwIf() failed");
-            return this;
-        },
-        /** Throws if expr is falsy or expr is a function and expr()
-            returns falsy. */
-        throwUnless: function(expr, msg){
-            ++this.counter;
-            if(!this.toBool(expr)) throw new Error(msg || "throwUnless() failed");
-            return this;
         }
     };
 

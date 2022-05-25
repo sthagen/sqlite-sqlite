@@ -17,6 +17,9 @@
 (function(){
     'use strict';
 
+    /* Recall that the 'self' symbol, except where locally
+       overwritten, refers to the global window or worker object. */
+
     /**
        The SqliteFiddle object is intended to be the primary
        app-level object for the main-thread side of the sqlite
@@ -129,44 +132,55 @@
         return (arguments.length>1 ? arguments[0] : document)
             .querySelector(arguments[arguments.length-1]);
     };
-    
-    const statusElement = E('#module-status');
-    const progressElement = E('#module-progress');
-    const spinnerElement = E('#module-spinner');
 
+    /** Handles status updates from the Module object. */
     SF.addMsgHandler('module', function f(ev){
         ev = ev.data;
-        //console.log("Module status:",ev);
-        if('status'!==ev.type) return;
-        /* This weird handling of the ev.data is simply how
-           emscripten's auto-generated code notifies the client of
-           load progress. */
-        let text = ev.data;
-        if(!f.last) f.last = { time: Date.now(), text: '' };
-        if(text === f.last.text) return;
-        const m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
-        const now = Date.now();
-        if(m && now - f.last.time < 30) return; // if this is a progress update, skip it if too soon
-        f.last.time = now;
-        f.last.text = text;
-        if(m) {
-            text = m[1];
-            progressElement.value = parseInt(m[2])*100;
-            progressElement.max = parseInt(m[4])*100;
-            progressElement.hidden = false;
-            spinnerElement.hidden = false;
-        } else {
-            progressElement.remove();
-            if(!text) spinnerElement.remove();
+        if('status'!==ev.type){
+            console.warn("Unexpected module-type message:",ev);
+            return;
         }
-        if(text){
-            statusElement.innerText = text;
+        if(!f.ui){
+            f.ui = {
+                status: E('#module-status'),
+                progress: E('#module-progress'),
+                spinner: E('#module-spinner')
+            };
+        }
+        const msg = ev.data;
+        if(f.ui.progres){
+            progress.value = msg.step;
+            progress.max = msg.step + 1/*we don't know how many steps to expect*/;
+        }
+        if(1==msg.step){
+            f.ui.progress.classList.remove('hidden');
+            f.ui.spinner.classList.remove('hidden');
+        }
+        if(msg.text){
+            f.ui.status.classList.remove('hidden');
+            f.ui.status.innerText = msg.text;
         }else{
-            console.log("Finalizing status.");
-            statusElement.remove();
-            SF.clearMsgHandlers('module');
-            self.onSFLoaded();
+            if(f.ui.progress){
+                f.ui.progress.remove();
+                f.ui.spinner.remove();
+                delete f.ui.progress;
+                delete f.ui.spinner;
+            }
+            f.ui.status.classList.add('hidden');
+            /* The module can post messages about fatal problems,
+               e.g. an exit() being triggered or assertion failure,
+               after the last "load" message has arrived, so
+               leave f.ui.status and message listener intact. */
         }
+    });
+
+    /**
+       The 'fiddle-ready' event is fired (with no payload) when the
+       wasm module has finished loading. Interestingly, that happens
+       _before_ the final module:status event */
+    SF.addMsgHandler('fiddle-ready', function(){
+        SF.clearMsgHandlers('fiddle-ready');
+        self.onSFLoaded();
     });
 
     /**
@@ -205,9 +219,9 @@
         },false);
 
         /** To be called immediately before work is sent to the
-            worker.  Updates some UI elements. The 'working'/'end'
+            worker. Updates some UI elements. The 'working'/'end'
             event will apply the inverse, undoing the bits this
-            function does.  This impl is not in the 'working'/'start'
+            function does. This impl is not in the 'working'/'start'
             event handler because that event is given to us
             asynchronously _after_ we need to have performed this
             work.
@@ -238,13 +252,15 @@
         };
 
         SF.addMsgHandler('working',function f(ev){
-            if('start' === ev.data){
-                /* See notes in preStartWork(). */
-            }else if('end' === ev.data){
-                preStartWork._.pageTitle.innerText = preStartWork._.pageTitleOrig;
-                btnShellExec.innerText = preStartWork._.btnLabel;
-                btnShellExec.removeAttribute('disabled');
+            switch(ev.data){
+                case 'start': /* See notes in preStartWork(). */; return;
+                case 'end':
+                    preStartWork._.pageTitle.innerText = preStartWork._.pageTitleOrig;
+                    btnShellExec.innerText = preStartWork._.btnLabel;
+                    btnShellExec.removeAttribute('disabled');
+                    return;
             }
+            console.warn("Unhandled 'working' event:",ev.data);
         });
 
         /* For each checkbox with data-csstgt, set up a handler which
