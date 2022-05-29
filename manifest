@@ -1,5 +1,5 @@
-C Mark\san\salways-true\sconditional\sas\sALWAYS().
-D 2022-05-27T18:06:49.146
+C Apply\sthe\sUPDATE-FROM\sfile\sfrom\scheck-in\s[98b3816bbaf539ea]\sto\nupdate-delete-limit\sbuilds.
+D 2022-05-28T14:03:23.844
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -61,9 +61,9 @@ F ext/fiddle/EXPORTED_RUNTIME_METHODS b831017ba67ba993b34a27400cef2f6095bd6789c0
 F ext/fiddle/Makefile de65d04bfb312e94dbd7a0e7d99fb126f0abc1db62f920159c4124b5a42347d8
 F ext/fiddle/SqliteTestUtil.js 559731c3e8e0de330ec7d292e6c1846566408caee6637acc8a119ac338a8781c
 F ext/fiddle/emscripten.css 3d253a6fdb8983a2ac983855bfbdd4b6fa1ff267c28d69513dd6ef1f289ada3f
-F ext/fiddle/fiddle-worker.js e3e8c7af2d6d10d915c8d6b5c88bd48587afbfdab7cb76858829c3b83e83a810
+F ext/fiddle/fiddle-worker.js 3a19253dc026d1ad9064ee853f3c4da3385223ce4434dab1838837525d817371
 F ext/fiddle/fiddle.html 724f1cd4126616bc87f5871f78d3f7aaaf41e45c9728724627baab87e6af35f0
-F ext/fiddle/fiddle.js 700df283e8c6e87519aba6839e1aa99d040b39ea545253cbe79da18e24af256a
+F ext/fiddle/fiddle.js 5b456ed7085830cda2fc75a0801476174a978521949335f24bc4154d076dcd4d
 F ext/fiddle/index.md d9c1c308d8074341bc3b11d1d39073cd77754cb3ca9aeb949f23fdd8323d81cf
 F ext/fiddle/sqlite3-api.js 8500698d2163f4a25f8e5e6810ad826487342579d6a321d82b244dbc8e6f6db6
 F ext/fiddle/testing.css 750572dded671d2cf142bbcb27af5542522ac08db128245d0b9fe410aa1d7f2a
@@ -556,7 +556,7 @@ F src/os_win.c a8ea80037e81127ca01959daa87387cc135f325c88dc745376c4f760de852a10
 F src/os_win.h 7b073010f1451abe501be30d12f6bc599824944a
 F src/pager.c 42120492784fc9bcd9082b5c9b5e329b7318c357f9f3574a1bbfcf7418910356
 F src/pager.h f82e9844166e1585f5786837ddc7709966138ced17f568c16af7ccf946c2baa3
-F src/parse.y b58ad9fadf31e26e45214a4d8be4351ec2910bbd914caa2e172d616057f67ddc
+F src/parse.y 8e67d820030d2655b9942ffe61c1e7e6b96cea2f2f72183533299393907d0564
 F src/pcache.c 084e638432c610f95aea72b8509f0845d2791293f39d1b82f0c0a7e089c3bb6b
 F src/pcache.h 4f87acd914cef5016fae3030343540d75f5b85a1877eed1a2a19b9f284248586
 F src/pcache1.c 54881292a9a5db202b2c0ac541c5e3ef9a5e8c4f1c1383adb2601d5499a60e65
@@ -1970,8 +1970,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P 01beb0365c529481605f1864b1b6760e2484fad08d56a72e00e34acff37e23f8
-R 01dd885cb493be38067a73be4179a0ab
+P fd668da5ccf037c2ad8e61e381dd1eb398a8deab42a00593e551c30bd176890d
+R e62d67531970b1619ea2f47c2f8c0901
 U drh
-Z 416cd8c7c7dc19c9e93e8237f3081073
+Z 2f27046509ba92f24780e3263d6632b0
 # Remove this line to create a well-formed Fossil manifest.
