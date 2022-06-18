@@ -896,17 +896,35 @@ static int block_troublesome_sql(
     }
     case SQLITE_FUNCTION: {
       static const char *azBadFuncs[] = {
+        "current_date",
+        "current_time",
+        "current_timestamp",
+        "date",
+        "datetime",
+        "implies_nonnull_row",
+        "julianday",
         "random",
         "randomblob",
-        "rtreedepth",
+        "sqlite_offset",
+        "strftime",
+        "time",
+        "unixepoch",
       };
-      int i;
-      for(i=0; i<sizeof(azBadFuncs)/sizeof(azBadFuncs[0]); i++){
-        if( sqlite3_stricmp(azBadFuncs[i], zArg2)==0 ){
+      int first, last;
+      first = 0;
+      last = sizeof(azBadFuncs)/sizeof(azBadFuncs[0]) - 1;
+      do{
+        int mid = (first+last)/2;
+        int c = sqlite3_stricmp(azBadFuncs[mid], zArg2);
+        if( c<0 ){
+          first = mid+1;
+        }else if( c>0 ){
+          last = mid-1;
+        }else{
           *pFlags |= BTS_BADFUNC;
           break;
         }
-      }
+      }while( first<=last );
       break;
     }
     case SQLITE_READ: {
@@ -926,6 +944,7 @@ int fuzz_invariant(
   sqlite3_stmt *pStmt,    /* Test statement stopped on an SQLITE_ROW */
   int iCnt,               /* Invariant sequence number, starting at 0 */
   int iRow,               /* The row number for pStmt */
+  int nRow,               /* Total number of output rows */
   int *pbCorrupt,         /* IN/OUT: Flag indicating a corrupt database file */
   int eVerbosity          /* How much debugging output */
 );
@@ -949,25 +968,7 @@ static int runDbSql(sqlite3 *db, const char *zSql, unsigned int *pBtsFlags){
     int nRow = 0;
     while( (rc = sqlite3_step(pStmt))==SQLITE_ROW ){
       nRow++;
-      if( (*pBtsFlags)==BTS_SELECT
-       && g.doInvariantChecks
-       && !sqlite3_stmt_isexplain(pStmt)
-      ){
-        int iCnt = 0;
-        for(iCnt=0; iCnt<99999; iCnt++){
-          rc = fuzz_invariant(db, pStmt, iCnt, nRow, &bCorrupt, eVerbosity);
-          if( rc==SQLITE_DONE ) break;
-          if( rc!=SQLITE_ERROR ) g.nInvariant++;
-          if( eVerbosity>0 ){
-            if( rc==SQLITE_OK ){
-              printf("invariant-check: ok\n");
-            }else if( rc==SQLITE_CORRUPT ){
-              printf("invariant-check: failed due to database corruption\n");
-            }
-          }
-        }
-      }
-      if( eVerbosity>=5 ){
+      if( eVerbosity>=4 ){
         int j;
         for(j=0; j<sqlite3_column_count(pStmt); j++){
           if( j ) printf(",");
@@ -1015,7 +1016,33 @@ static int runDbSql(sqlite3 *db, const char *zSql, unsigned int *pBtsFlags){
         fflush(stdout);
       } /* End if( eVerbosity>=5 ) */
     } /* End while( SQLITE_ROW */
-    if( rc!=SQLITE_DONE && eVerbosity>=4 ){
+    if( rc==SQLITE_DONE ){
+      if( (*pBtsFlags)==BTS_SELECT
+       && g.doInvariantChecks
+       && !sqlite3_stmt_isexplain(pStmt)
+       && nRow>0
+      ){
+        int iRow = 0;
+        sqlite3_reset(pStmt);
+        while( sqlite3_step(pStmt)==SQLITE_ROW ){
+          int iCnt = 0;
+          iRow++;
+          for(iCnt=0; iCnt<99999; iCnt++){
+            rc = fuzz_invariant(db, pStmt, iCnt, iRow, nRow,
+                                &bCorrupt, eVerbosity);
+            if( rc==SQLITE_DONE ) break;
+            if( rc!=SQLITE_ERROR ) g.nInvariant++;
+            if( eVerbosity>0 ){
+              if( rc==SQLITE_OK ){
+                printf("invariant-check: ok\n");
+              }else if( rc==SQLITE_CORRUPT ){
+                printf("invariant-check: failed due to database corruption\n");
+              }
+            }
+          }
+        }          
+      }
+    }else if( eVerbosity>=4 ){
       printf("SQL-ERROR: (%d) %s\n", rc, sqlite3_errmsg(db));
       fflush(stdout);
     }
