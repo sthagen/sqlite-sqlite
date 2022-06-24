@@ -4282,8 +4282,8 @@ static int flattenSubquery(
   */
   if( (pSubitem->fg.jointype & (JT_OUTER|JT_LTORJ))!=0 ){
     if( pSubSrc->nSrc>1                        /* (3a) */
-     || isAgg                                  /* (3b) */
-     || IsVirtual(pSubSrc->a[0].pTab)          /* (3c) */
+     || isAgg                                  /* (3c) */
+     || IsVirtual(pSubSrc->a[0].pTab)          /* (3b) */
      || (p->selFlags & SF_Distinct)!=0         /* (3d) */
      || (pSubitem->fg.jointype & JT_RIGHT)!=0  /* (26) */
     ){
@@ -6994,7 +6994,7 @@ int sqlite3Select(
 
     /* Generate code to implement the subquery
     **
-    ** The subquery is implemented as a co-routine all if the following are
+    ** The subquery is implemented as a co-routine if all of the following are
     ** true:
     **
     **    (1)  the subquery is guaranteed to be the outer loop (so that
