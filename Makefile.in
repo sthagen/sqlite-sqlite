@@ -503,6 +503,7 @@ TESTSRC2 = \
   $(TOP)/src/pcache1.c \
   $(TOP)/src/select.c \
   $(TOP)/src/tokenize.c \
+  $(TOP)/src/treeview.c \
   $(TOP)/src/utf.c \
   $(TOP)/src/util.c \
   $(TOP)/src/vdbeapi.c \
@@ -1540,6 +1541,7 @@ $(fiddle_module_js): Makefile sqlite3.c shell.c \
 	emcc -o $@ $(emcc_flags) \
         -sEXPORT_NAME=initFiddleModule \
         -sEXPORTED_FUNCTIONS=@$(fiddle_dir_abs)/EXPORTED_FUNCTIONS.fiddle \
+        -DSQLITE_SHELL_FIDDLE \
         sqlite3.c shell.c
 	gzip < $@ > $@.gz
 	gzip < $(fiddle_dir)/fiddle-module.wasm > $(fiddle_dir)/fiddle-module.wasm.gz
