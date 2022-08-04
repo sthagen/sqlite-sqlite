@@ -1,5 +1,5 @@
-C In\sthe\sxUpdate\smethod\sof\sthe\sGeoPoly\svirtual\stable,\smake\ssure\sthat\sthe\nnumber\sof\supdated\scolumns\sdoes\snot\sexceed\sthe\sunderlying\simplementation,\seven\nif\sthe\svirtual\stable\sobject\srecords\san\sexcess\snumber\sof\scolumn\sin\sthe\snAux\nfield\sdue\sto\stable\sconstraints\sin\sthe\stable\sdefinition.\nFix\sfor\sthe\sproblem\sreported\sby\n[forum:/forumpost/a096ab7d96bb057a|forum\spost\sa096ab7d96bb057a].
-D 2022-08-01T13:14:03.301
+C Fix\sa\sproblem\swith\sthe\squery\soptimizer\sfor\sLIMIT/OFFSET\squeries\swhen\nunderlying\squery\sis\sa\sUNION\sALL\sand\sboth\sarms\sof\sthe\sUNION\sALL\sare\nsubqueries\swith\san\sORDER\sBY\sclause.\s\sThis\sbug\swas\sreported\sat\n[forum:/forumpost/6b5e9188f0657616|forum\spost\s6b5e9188f0657616].\s\sThe\nproblem\swas\sintroduced\sin\s2015\s(SQLite\sversion\s3.9.0)\sby\scheck-in\n[4b631364354068af].\s\sSee\salso\sticket\s[b65cb2c8d91f6685].
+D 2022-08-04T17:15:00.492
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -570,7 +570,7 @@ F src/printf.c e99ee9741e79ae3873458146f59644276657340385ade4e76a5f5d1c25793764
 F src/random.c 097dc8b31b8fba5a9aca1697aeb9fd82078ec91be734c16bffda620ced7ab83c
 F src/resolve.c efea4e5fbecfd6d0a9071b0be0d952620991673391b6ffaaf4c277b0bb674633
 F src/rowset.c ba9515a922af32abe1f7d39406b9d35730ed65efab9443dc5702693b60854c92
-F src/select.c 76708e3a8cb80f011f31f1eb6fa5f433aef8f47c85c0a2709148d673a719a846
+F src/select.c 4750fbe9d8ecb7236baf7a9bea4299bb87126e08c209645666a0ae8f0efbe0fc
 F src/shell.c.in 29749b34bbd19d0004fdb6f61f62659096e1c0b4dfb1ad2314e7fafbe9dd8d37
 F src/sqlite.h.in be265991edca9aea69986758b58ba81cbf5ae403fe0c4ea1d0c9df0cdc8f25ed
 F src/sqlite3.rc 5121c9e10c3964d5755191c80dd1180c122fc3a8
@@ -642,10 +642,10 @@ F src/upsert.c 8789047a8f0a601ea42fa0256d1ba3190c13746b6ba940fe2d25643a7e991937
 F src/utf.c ee39565f0843775cc2c81135751ddd93eceb91a673ea2c57f61c76f288b041a0
 F src/util.c 602fe229f32a96ceccae4f40824129669582096f7c355f53dbac156c9fecef23
 F src/vacuum.c bb346170b0b54c6683bba4a5983aea40485597fdf605c87ec8bc2e199fe88cd8
-F src/vdbe.c 1266f3a4744224253dd74f0080014be8056b062c6f2f6a81e229fa0d306d4102
+F src/vdbe.c 796fbae3e989744ea3761c5ab8a23bec1764ff889d267d71666fcaa4aeb75a81
 F src/vdbe.h 64619af62603dc3c4f5ff6ff6d2c8f389abd667a29ce6007ed44bd22b3211cd0
 F src/vdbeInt.h 2cad0aeeb106371ed0e0946bab89f60627087068847afc2451c05056961c18da
-F src/vdbeapi.c d68267db6e6641994e17c70670c40fd67ceb2352e42188815ed8c05d4d6502cb
+F src/vdbeapi.c 4181dffeef6ee181275cfecf27ad8577024c17ee9639531decdf4162b8c0326b
 F src/vdbeaux.c 8584f4a20997fd918f0d957ab4f73d7411159772297c5020c188973bdc41dbf0
 F src/vdbeblob.c 5e61ce31aca17db8fb60395407457a8c1c7fb471dde405e0cd675974611dcfcd
 F src/vdbemem.c 5ebf05c0182addedb1607ade848e1c83cef40981df94d1abfab0c59288c6064f
@@ -659,7 +659,7 @@ F src/wal.h c3aa7825bfa2fe0d85bef2db94655f99870a285778baa36307c0a16da32b226a
 F src/walker.c f890a3298418d7cba3b69b8803594fdc484ea241206a8dfa99db6dd36f8cbb3b
 F src/where.c 1049685e84bd74692ad76984a3411a21c5a1e6ddd08c981ec94d2f11f769e07f
 F src/whereInt.h b48ca529ffe293c18cbfa8326af18a09e39910de66fb3e96ef788c7cbf8ef3a7
-F src/wherecode.c 210240c9cec2a1d1494a3ac7852e9432245382e752b490c2bb437637c2c98711
+F src/wherecode.c 719a5bb0102711a6ebed8d4385b831a27ce679172f3ae8e9aaec0dc1e415a95a
 F src/whereexpr.c 55a39f42aaf982574fbf52906371a84cceed98a994422198dfd03db4fce4cc46
 F src/window.c 928e215840e2f2d9a2746e018c9643ef42c66c4ab6630ef0df7fa388fa145e86
 F test/8_3_names.test ebbb5cd36741350040fd28b432ceadf495be25b2
@@ -1286,7 +1286,7 @@ F test/null.test b7ff206a1c60fe01aa2abd33ef9ea83c93727d993ca8a613de86e925c9f2bc6
 F test/nulls1.test 7a5e4346ee4285034100b4cd20e6784f16a9d6c927e44ecdf10034086bbee9c9
 F test/numcast.test 5d126f7f581432e86a90d1e35cac625164aec4a1
 F test/numindex1.test 20a5450d4b056e48cd5db30e659f13347a099823
-F test/offset1.test f06b83657bcf26f9ce805e67450e189e282143b2
+F test/offset1.test 72cca52482cbd5bc687cfa67aa2566c859081b5a353fd2f9da9bbd3914dea1ef
 F test/openv2.test 0d3040974bf402e19b7df4b783e447289d7ab394
 F test/optfuzz-db01.c 9f2fa80b8f84ebbf1f2e8b13421a4e0477fe300f6686fbd76cac1d2db66e0fdc
 F test/optfuzz-db01.txt 21f6bdeadc701cf11528276e2a55c70bfcb846ba42df327f979bd9e7b6ce7041
@@ -1981,8 +1981,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P 01de7ec44fb1e8e6f847eaef433216b3163a44a8789451718e1c419ef840ddfb
-R 6e9af4a1fd48ba4a0b2f74feb2fb7ec8
+P 64348d0b665f61c3a89f51341f23ca87f939dd9e306dc58c2004e46ab04e696e
+R ee3ba899316d027809db4ccd10585a40
 U drh
-Z b4532202f959fae679f2c4c7df6a9a48
+Z 55de9d5c0f343647378b885b0fe37df5
 # Remove this line to create a well-formed Fossil manifest.
