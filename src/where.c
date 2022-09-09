@@ -2251,8 +2251,9 @@ static int whereLoopXfer(sqlite3 *db, WhereLoop *pTo, WhereLoop *pFrom){
 ** Delete a WhereLoop object
 */
 static void whereLoopDelete(sqlite3 *db, WhereLoop *p){
+  assert( db!=0 );
   whereLoopClear(db, p);
-  sqlite3DbFreeNN(db, p);
+  sqlite3DbNNFreeNN(db, p);
 }
 
 /*
@@ -2260,6 +2261,7 @@ static void whereLoopDelete(sqlite3 *db, WhereLoop *p){
 */
 static void whereInfoFree(sqlite3 *db, WhereInfo *pWInfo){
   assert( pWInfo!=0 );
+  assert( db!=0 );
   sqlite3WhereClauseClear(&pWInfo->sWC);
   while( pWInfo->pLoops ){
     WhereLoop *p = pWInfo->pLoops;
@@ -2269,10 +2271,10 @@ static void whereInfoFree(sqlite3 *db, WhereInfo *pWInfo){
   assert( pWInfo->pExprMods==0 );
   while( pWInfo->pMemToFree ){
     WhereMemBlock *pNext = pWInfo->pMemToFree->pNext;
-    sqlite3DbFreeNN(db, pWInfo->pMemToFree);
+    sqlite3DbNNFreeNN(db, pWInfo->pMemToFree);
     pWInfo->pMemToFree = pNext;
   }
-  sqlite3DbFreeNN(db, pWInfo);
+  sqlite3DbNNFreeNN(db, pWInfo);
 }
 
 /* Undo all Expr node modifications
@@ -3461,6 +3463,9 @@ static int whereLoopAddBtree(
 #else
       pNew->rRun = rSize + 16;
 #endif
+      if( IsView(pTab) || (pTab->tabFlags & TF_Ephemeral)!=0 ){
+        pNew->wsFlags |= WHERE_VIEWSCAN;
+      }
       ApplyCostMultiplier(pNew->rRun, pTab->costMult);
       whereLoopOutputAdjust(pWC, pNew, rSize);
       rc = whereLoopInsert(pBuilder, pNew);
@@ -4841,6 +4846,13 @@ static int wherePathSolver(WhereInfo *pWInfo, LogEst nRowEst){
           rUnsorted -= 2;  /* TUNING:  Slight bias in favor of no-sort plans */
         }
 
+        /* TUNING:  A full-scan of a VIEW or subquery in the outer loop
+        ** is not so bad. */
+        if( iLoop==0 && (pWLoop->wsFlags & WHERE_VIEWSCAN)!=0 ){
+          rCost += -10;
+          nOut += -30;
+        }
+
         /* Check to see if pWLoop should be added to the set of
         ** mxChoice best-so-far paths.
         **
@@ -5073,7 +5085,8 @@ static int wherePathSolver(WhereInfo *pWInfo, LogEst nRowEst){
   pWInfo->nRowOut = pFrom->nRow;
 
   /* Free temporary memory and return success */
-  sqlite3DbFreeNN(db, pSpace);
+  assert( db!=0 );
+  sqlite3DbNNFreeNN(db, pSpace);
   return SQLITE_OK;
 }
 

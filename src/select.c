@@ -76,6 +76,7 @@ struct SortCtx {
 ** If bFree==0, Leave the first Select object unfreed
 */
 static void clearSelect(sqlite3 *db, Select *p, int bFree){
+  assert( db!=0 );
   while( p ){
     Select *pPrior = p->pPrior;
     sqlite3ExprListDelete(db, p->pEList);
@@ -95,7 +96,7 @@ static void clearSelect(sqlite3 *db, Select *p, int bFree){
       sqlite3WindowUnlinkFromSelect(p->pWin);
     }
 #endif
-    if( bFree ) sqlite3DbFreeNN(db, p);
+    if( bFree ) sqlite3DbNNFreeNN(db, p);
     p = pPrior;
     bFree = 1;
   }
@@ -1501,9 +1502,10 @@ KeyInfo *sqlite3KeyInfoAlloc(sqlite3 *db, int N, int X){
 */
 void sqlite3KeyInfoUnref(KeyInfo *p){
   if( p ){
+    assert( p->db!=0 );
     assert( p->nRef>0 );
     p->nRef--;
-    if( p->nRef==0 ) sqlite3DbFreeNN(p->db, p);
+    if( p->nRef==0 ) sqlite3DbNNFreeNN(p->db, p);
   }
 }
 
@@ -3688,10 +3690,11 @@ static int multiSelectOrderBy(
   */
   sqlite3VdbeResolveLabel(v, labelEnd);
 
-  /* Reassembly the compound query so that it will be freed correctly
+  /* Reassemble the compound query so that it will be freed correctly
   ** by the calling function */
   if( pSplit->pPrior ){
-    sqlite3SelectDelete(db, pSplit->pPrior);
+    sqlite3ParserAddCleanup(pParse, 
+       (void(*)(sqlite3*,void*))sqlite3SelectDelete, pSplit->pPrior);
   }
   pSplit->pPrior = pPrior;
   pPrior->pNext = pSplit;
