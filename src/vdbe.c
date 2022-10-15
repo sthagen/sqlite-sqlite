@@ -2588,19 +2588,90 @@ case OP_IsNull: {            /* same as TK_ISNULL, jump, in1 */
   break;
 }
 
-/* Opcode: IsNullOrType P1 P2 P3 * *
-** Synopsis: if typeof(r[P1]) IN (P3,5) goto P2
+/* Opcode: IsType P1 P2 P3 P4 P5
+** Synopsis: if typeof(P1.P3) in P5 goto P2
 **
-** Jump to P2 if the value in register P1 is NULL or has a datatype P3.
-** P3 is an integer which should be one of SQLITE_INTEGER, SQLITE_FLOAT,
-** SQLITE_BLOB, SQLITE_NULL, or SQLITE_TEXT.
+** Jump to P2 if the type of a column in a btree is one of the types specified
+** by the P5 bitmask.
+**
+** P1 is normally a cursor on a btree for which the row decode cache is
+** valid through at least column P3.  In other words, there should have been
+** a prior OP_Column for column P3 or greater.  If the cursor is not valid,
+** then this opcode might give spurious results.
+** The the btree row has fewer than P3 columns, then use P4 as the
+** datatype.
+**
+** If P1 is -1, then P3 is a register number and the datatype is taken
+** from the value in that register.
+**
+** P5 is a bitmask of data types.  SQLITE_INTEGER is the least significant
+** (0x01) bit. SQLITE_FLOAT is the 0x02 bit. SQLITE_TEXT is 0x04.
+** SQLITE_BLOB is 0x08.  SQLITE_NULL is 0x10.
+**
+** Take the jump to address P2 if and only if the datatype of the
+** value determined by P1 and P3 corresponds to one of the bits in the
+** P5 bitmask.
+**
 */
-case OP_IsNullOrType: {      /* jump, in1 */
-  int doTheJump;
-  pIn1 = &aMem[pOp->p1];
-  doTheJump = (pIn1->flags & MEM_Null)!=0 || sqlite3_value_type(pIn1)==pOp->p3;
-  VdbeBranchTaken( doTheJump, 2);
-  if( doTheJump ) goto jump_to_p2;
+case OP_IsType: {        /* jump */
+  VdbeCursor *pC;
+  u16 typeMask;
+  u32 serialType;
+
+  assert( pOp->p1>=(-1) && pOp->p1<p->nCursor );
+  assert( pOp->p1>=0 || (pOp->p3>=0 && pOp->p3<=(p->nMem+1 - p->nCursor)) );
+  if( pOp->p1>=0 ){
+    pC = p->apCsr[pOp->p1];
+    assert( pC!=0 );
+    assert( pOp->p3>=0 );
+    if( pOp->p3<pC->nHdrParsed ){
+      serialType = pC->aType[pOp->p3];
+      if( serialType>=12 ){
+        if( serialType&1 ){
+          typeMask = 0x04;   /* SQLITE_TEXT */
+        }else{
+          typeMask = 0x08;   /* SQLITE_BLOB */
+        }
+      }else{
+        static const unsigned char aMask[] = {
+           0x10, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x2,
+           0x01, 0x01, 0x10, 0x10
+        };
+        testcase( serialType==0 );
+        testcase( serialType==1 );
+        testcase( serialType==2 );
+        testcase( serialType==3 );
+        testcase( serialType==4 );
+        testcase( serialType==5 );
+        testcase( serialType==6 );
+        testcase( serialType==7 );
+        testcase( serialType==8 );
+        testcase( serialType==9 );
+        testcase( serialType==10 );
+        testcase( serialType==11 );
+        typeMask = aMask[serialType];
+      }
+    }else{
+      typeMask = 1 << (pOp->p4.i - 1);
+      testcase( typeMask==0x01 );
+      testcase( typeMask==0x02 );
+      testcase( typeMask==0x04 );
+      testcase( typeMask==0x08 );
+      testcase( typeMask==0x10 );
+    }
+  }else{
+    assert( memIsValid(&aMem[pOp->p3]) );
+    typeMask = 1 << (sqlite3_value_type((sqlite3_value*)&aMem[pOp->p3])-1);
+    testcase( typeMask==0x01 );
+    testcase( typeMask==0x02 );
+    testcase( typeMask==0x04 );
+    testcase( typeMask==0x08 );
+    testcase( typeMask==0x10 );
+  }
+  VdbeBranchTaken( (typeMask & pOp->p5)!=0, 2);
+  if( typeMask & pOp->p5 ){
+    goto jump_to_p2;
+  }
   break;
 }
 
@@ -2701,7 +2772,7 @@ case OP_Offset: {          /* out3 */
 ** Interpret the data that cursor P1 points to as a structure built using
 ** the MakeRecord instruction.  (See the MakeRecord opcode for additional
 ** information about the format of the data.)  Extract the P2-th column
-** from this record.  If there are less that (P2+1) 
+** from this record.  If there are less than (P2+1) 
 ** values in the record, extract a NULL.
 **
 ** The value extracted is stored in register P3.
@@ -2710,10 +2781,12 @@ case OP_Offset: {          /* out3 */
 ** if the P4 argument is a P4_MEM use the value of the P4 argument as
 ** the result.
 **
-** If the OPFLAG_LENGTHARG and OPFLAG_TYPEOFARG bits are set on P5 then
-** the result is guaranteed to only be used as the argument of a length()
-** or typeof() function, respectively.  The loading of large blobs can be
-** skipped for length() and all content loading can be skipped for typeof().
+** If the OPFLAG_LENGTHARG bit is set in P5 then the result is guaranteed
+** to only be used by the length() function or the equivalent.  The content
+** of large blobs is not loaded, thus saving CPU cycles.  If the
+** OPFLAG_TYPEOFARG bit is set then the result will only be used by the
+** typeof() function or the IS NULL or IS NOT NULL operators or the
+** equivalent.  In this case, all content loading can be omitted.
 */
 case OP_Column: {
   u32 p2;            /* column number to retrieve */
