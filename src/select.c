@@ -5009,6 +5009,13 @@ static int pushDownWindowCheck(Parse *pParse, Select *pSubq, Expr *pExpr){
 **       be materialized.  (This restriction is implemented in the calling
 **       routine.)
 **
+**   (8) The subquery may not be a compound that uses UNION, INTERSECT,
+**       or EXCEPT.  (We could, perhaps, relax this restriction to allow
+**       this case if none of the comparisons operators between left and
+**       right arms of the compound use a collation other than BINARY.
+**       But it is a lot of work to check that case for an obscure and
+**       minor optimization, so we omit it for now.)
+**
 ** Return 0 if no changes are made and non-zero if one or more WHERE clause
 ** terms are duplicated into the subquery.
 */
@@ -5028,6 +5035,10 @@ static int pushDownWhereTerms(
   if( pSubq->pPrior ){
     Select *pSel;
     for(pSel=pSubq; pSel; pSel=pSel->pPrior){
+      u8 op = pSel->op;
+      assert( op==TK_ALL || op==TK_SELECT 
+           || op==TK_UNION || op==TK_INTERSECT || op==TK_EXCEPT );
+      if( op!=TK_ALL && op!=TK_SELECT ) return 0;  /* restriction (8) */
       if( pSel->pWin ) return 0;    /* restriction (6b) */
     }
   }else{
@@ -7486,7 +7497,7 @@ int sqlite3Select(
       sqlite3VdbeAddOp2(v, OP_Gosub, regReset, addrReset);
       SELECTTRACE(1,pParse,p,("WhereBegin\n"));
       pWInfo = sqlite3WhereBegin(pParse, pTabList, pWhere, pGroupBy, pDistinct,
-          0, (sDistinct.isTnct==2 ? WHERE_DISTINCTBY : WHERE_GROUPBY) 
+          p, (sDistinct.isTnct==2 ? WHERE_DISTINCTBY : WHERE_GROUPBY) 
           |  (orderByGrp ? WHERE_SORTBYGROUP : 0) | distFlag, 0
       );
       if( pWInfo==0 ){
@@ -7785,7 +7796,7 @@ int sqlite3Select(
 
         SELECTTRACE(1,pParse,p,("WhereBegin\n"));
         pWInfo = sqlite3WhereBegin(pParse, pTabList, pWhere, pMinMaxOrderBy,
-                                   pDistinct, 0, minMaxFlag|distFlag, 0);
+                                   pDistinct, p, minMaxFlag|distFlag, 0);
         if( pWInfo==0 ){
           goto select_end;
         }

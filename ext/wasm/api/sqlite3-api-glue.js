@@ -20,8 +20,8 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
   'use strict';
   const toss = (...args)=>{throw new Error(args.join(' '))};
   const toss3 = sqlite3.SQLite3Error.toss;
-  const capi = sqlite3.capi, wasm = capi.wasm, util = capi.util;
-  self.WhWasmUtilInstaller(capi.wasm);
+  const capi = sqlite3.capi, wasm = sqlite3.wasm, util = sqlite3.util;
+  self.WhWasmUtilInstaller(wasm);
   delete self.WhWasmUtilInstaller;
 
   /**
@@ -45,7 +45,7 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
       if(v && v.constructor && v instanceof StructBinder.StructType){
         v = v.pointer;
       }
-      return (v === (v | 0) /* v is a 32-bit integer */)
+      return wasm.isPtr(v)
         ? argPointer(v)
         : toss("Invalid (object) type for StructType-type argument.");
     });
@@ -88,7 +88,7 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
       capi[e[0]] = wasm.xWrap.apply(null, e);
     }
     for(const e of wasm.bindingSignatures.wasm){
-      capi.wasm[e[0]] = wasm.xWrap.apply(null, e);
+      wasm[e[0]] = wasm.xWrap.apply(null, e);
     }
 
     /* For C API functions which cannot work properly unless
@@ -104,8 +104,12 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
         : fI64Disabled(e[0]);
     }
 
+    /* There's no(?) need to expose bindingSignatures to clients,
+       implicitly making it part of the public interface. */
+    delete wasm.bindingSignatures;
+
     if(wasm.exports.sqlite3_wasm_db_error){
-      util.sqlite3_wasm_db_error = capi.wasm.xWrap(
+      util.sqlite3_wasm_db_error = wasm.xWrap(
         'sqlite3_wasm_db_error', 'int', 'sqlite3*', 'int', 'string'
       );
     }else{
@@ -115,19 +119,19 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
       };
     }
 
-    /**
-       When registering a VFS and its related components it may be
-       necessary to ensure that JS keeps a reference to them to keep
-       them from getting garbage collected. Simply pass each such value
-       to this function and a reference will be held to it for the life
-       of the app.
-    */
-    capi.sqlite3_vfs_register.addReference = function f(...args){
-      if(!f._) f._ = [];
-      f._.push(...args);
-    };
-
   }/*xWrap() bindings*/;
+
+  /**
+     When registering a VFS and its related components it may be
+     necessary to ensure that JS keeps a reference to them to keep
+     them from getting garbage collected. Simply pass each such value
+     to this function and a reference will be held to it for the life
+     of the app.
+  */
+  capi.sqlite3_vfs_register.addReference = function f(...args){
+    if(!f._) f._ = [];
+    f._.push(...args);
+  };
 
   /**
      Internal helper to assist in validating call argument counts in
@@ -172,7 +176,6 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
       }
       /* Wrap the callback in a WASM-bound function and convert the callback's
          `(char**)` arguments to arrays of strings... */
-      const wasm = capi.wasm;
       const cbwrap = function(pVoid, nCols, pColVals, pColNames){
         let rc = capi.SQLITE_ERROR;
         try {
@@ -395,7 +398,6 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
         return __dbArgcMismatch(pDb,"sqlite3_create_function_v2",f.length);
       }
       /* Wrap the callbacks in a WASM-bound functions... */
-      const wasm = capi.wasm;
       const uninstall = [/*funcs to uninstall on error*/];
       let rc;
       try{
@@ -437,7 +439,6 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
         return __dbArgcMismatch(pDb,"sqlite3_create_window_function",f.length);
       }
       /* Wrap the callbacks in a WASM-bound functions... */
-      const wasm = capi.wasm;
       const uninstall = [/*funcs to uninstall on error*/];
       let rc;
       try{

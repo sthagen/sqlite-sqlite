@@ -18,7 +18,7 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
   const toss = (...args)=>{throw new Error(args.join(' '))};
   const toss3 = (...args)=>{throw new sqlite3.SQLite3Error(...args)};
 
-  const capi = sqlite3.capi, wasm = capi.wasm, util = capi.util;
+  const capi = sqlite3.capi, wasm = sqlite3.wasm, util = sqlite3.util;
   /* What follows is colloquially known as "OO API #1". It is a
      binding of the sqlite3 API which is designed to be run within
      the same thread (main or worker) as the one in which the
@@ -281,6 +281,7 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
   const DB = function(...args){
     dbCtorHelper.apply(this, args);
   };
+  DB.dbCtorHelper = dbCtorHelper;
 
   /**
      Internal-use enum for mapping JS types to DB-bindable types.
@@ -515,25 +516,13 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
       }
     },
     /**
-       Similar to the this.filename property but will return a falsy
-       value for special names like ":memory:". Throws if the DB has
-       been closed. If passed an argument it then it will return the
-       filename of the ATTACHEd db with that name, else it assumes a
-       name of `main`. The argument may be either a JS string or
-       a pointer to a WASM-allocated C-string.
+       Similar to the this.filename but returns the
+       sqlite3_db_filename() value for the given database name,
+       defaulting to "main".  The argument may be either a JS string
+       or a pointer to a WASM-allocated C-string.
     */
-    getFilename: function(dbName='main'){
+    dbFilename: function(dbName='main'){
       return capi.sqlite3_db_filename(affirmDbOpen(this).pointer, dbName);
-    },
-    /**
-       Returns true if this db instance has a name which resolves to a
-       file. If the name is "" or starts with ":", it resolves to false.
-       Note that it is not aware of the peculiarities of URI-style
-       names and a URI-style name for a ":memory:" db will fool it.
-       Returns false if this db is closed.
-    */
-    hasFilename: function(){
-      return this.filename && ':'!==this.filename[0];
     },
     /**
        Returns the name of the given 0-based db number, as documented
@@ -705,7 +694,6 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     */
     exec: function(/*(sql [,obj]) || (obj)*/){
       affirmDbOpen(this);
-      const wasm = capi.wasm;
       const arg = parseExecArgs(arguments);
       if(!arg.sql){
         return (''===arg.sql) ? this : toss3("exec() requires an SQL string.");
@@ -936,7 +924,7 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
       const pApp = opt.pApp;
       if(undefined!==pApp &&
          null!==pApp &&
-         (('number'!==typeof pApp) || !capi.util.isInt32(pApp))){
+         (('number'!==typeof pApp) || !util.isInt32(pApp))){
         toss3("Invalid value for pApp property. Must be a legal WASM pointer value.");
       }
       const xDestroy = opt.xDestroy || 0;
@@ -1668,8 +1656,7 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
       ooApi: "0.1"
     },
     DB,
-    Stmt,
-    dbCtorHelper
+    Stmt
   }/*oo1 object*/;
 
   if(util.isUIThread()){
