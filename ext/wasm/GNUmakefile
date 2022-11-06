@@ -96,7 +96,7 @@ dir.dout := $(dir.wasm)/jswasm
 # dir.tmp = output dir for intermediary build files, as opposed to
 # end-user deliverables.
 dir.tmp := $(dir.wasm)/bld
-#CLEAN_FILES += $(wildcard $(dir.dout)/*) $(wildcard $(dir.tmp)/*)
+CLEAN_FILES += $(dir.tmp)/* $(dir.dout)/*
 ifeq (,$(wildcard $(dir.dout)))
   dir._tmp := $(shell mkdir -p $(dir.dout))
 endif
@@ -106,7 +106,7 @@ endif
 
 cflags.common :=  -I. -I.. -I$(dir.top)
 CLEAN_FILES += *~ $(dir.jacc)/*~ $(dir.api)/*~ $(dir.common)/*~
-emcc_enable_bigint ?= 1
+emcc.WASM_BIGINT ?= 1
 sqlite3.c := $(dir.top)/sqlite3.c
 sqlite3.h := $(dir.top)/sqlite3.h
 SQLITE_OPT = \
@@ -295,7 +295,11 @@ define call-make-pre-js
 pre-post-$(1).flags ?=
 $$(dir.tmp)/pre-js-$(1).js: $$(pre-js.js) $$(MAKEFILE)
 	cp $$(pre-js.js) $$@
-	echo "Module[xInstantiateWasm].uri = '$(1).wasm';" >> $$@
+	@if [ sqlite3-wasmfs = $(1) ]; then \
+		echo "delete Module[xNameOfInstantiateWasm] /*for WASMFS build*/;"; \
+	elif [ sqlite3 != $(1) ]; then \
+		echo "Module[xNameOfInstantiateWasm].uri = '$(1).wasm';"; \
+	fi >> $$@
 pre-post-$(1).deps := $$(pre-post-jses.deps) $$(dir.tmp)/pre-js-$(1).js
 pre-post-$(1).flags += --pre-js=$$(dir.tmp)/pre-js-$(1).js
 endef
@@ -335,13 +339,32 @@ emcc.jsflags += $(emcc.exportedRuntimeMethods)
 emcc.jsflags += -sUSE_CLOSURE_COMPILER=0
 emcc.jsflags += -sIMPORTED_MEMORY
 emcc.environment := -sENVIRONMENT=web,worker
+########################################################################
+# -sINITIAL_MEMORY: How much memory we need to start with is governed
+# at least in part by whether -sALLOW_MEMORY_GROWTH is enabled. If so,
+# we can start with less. If not, we need as much as we'll ever
+# possibly use (which, of course, we can't know for sure).  Note,
+# however, that speedtest1 shows that performance for even moderate
+# workloads MAY suffer considerably if we start small and have to grow
+# at runtime. e.g. OPFS-backed (speedtest1 --size 75) take MAY take X
+# time with 16mb+ memory and 3X time when starting with 8MB. However,
+# such test results are inconsistent due to browser internals which
+# are opaque to us.
 emcc.jsflags += -sALLOW_MEMORY_GROWTH
-# emcc: warning: USE_PTHREADS + ALLOW_MEMORY_GROWTH may run non-wasm code
-#       slowly, see https://github.com/WebAssembly/design/issues/1271
-#       [-Wpthreads-mem-growth]
-emcc.jsflags += -sINITIAL_MEMORY=13107200
-#emcc.jsflags += -sINITIAL_MEMORY=64225280
-# ^^^^ 64MB is not enough for WASMFS/OPFS test runs using batch-runner.js
+emcc.INITIAL_MEMORY.128 := 13107200
+emcc.INITIAL_MEMORY.96  := 100663296
+emcc.INITIAL_MEMORY.64  := 64225280
+emcc.INITIAL_MEMORY.32  := 33554432
+emcc.INITIAL_MEMORY.16  := 16777216
+emcc.INITIAL_MEMORY.8   := 8388608
+emcc.INITIAL_MEMORY ?= 16
+ifeq (,$(emcc.INITIAL_MEMORY.$(emcc.INITIAL_MEMORY)))
+$(error emcc.INITIAL_MEMORY must be one of: 8, 16, 32, 64, 96, 128 (megabytes))
+endif
+emcc.jsflags += -sINITIAL_MEMORY=$(emcc.INITIAL_MEMORY.$(emcc.INITIAL_MEMORY))
+# /INITIAL_MEMORY
+########################################################################
+
 emcc.jsflags += $(emcc.environment)
 #emcc.jsflags += -sTOTAL_STACK=4194304
 
@@ -369,14 +392,16 @@ emcc.jsflags += -sLLD_REPORT_UNDEFINED
 #emcc.jsflags += --unresolved-symbols=import-dynamic --experimental-pic
 #emcc.jsflags += --experimental-pic --unresolved-symbols=ingore-all --import-undefined
 #emcc.jsflags += --unresolved-symbols=ignore-all
-emcc.jsflags += -sWASM_BIGINT=$(emcc_enable_bigint)
-# ^^^^ MEMORY64=1 fails to load, erroring with:
+emcc.jsflags += -sWASM_BIGINT=$(emcc.WASM_BIGINT)
+
+########################################################################
+# -sMEMORY64=1 fails to load, erroring with:
 #  invalid memory limits flags 0x5
 #    (enable via --experimental-wasm-memory64)
 #
 # ^^^^ MEMORY64=2 builds and loads but dies when we do things like:
 #
-#  new Uint8Array(heapWrappers().HEAP8U.buffer, ptr, n)
+#  new Uint8Array(wasm.heap8u().buffer, ptr, n)
 #
 # because ptr is now a BigInt, so is invalid for passing to arguments
 # which have strict must-be-a-Number requirements.
@@ -386,14 +411,27 @@ emcc.jsflags += -sWASM_BIGINT=$(emcc_enable_bigint)
 ########################################################################
 # -sSINGLE_FILE:
 # https://github.com/emscripten-core/emscripten/blob/main/src/settings.js#L1704
-# -sSINGLE_FILE=1 would be really nice but we have to build with -g
+# -sSINGLE_FILE=1 would be really nice but we have to build with -g3
 # for -O2 and higher to work (else minification breaks the code) and
 # cannot wasm-strip the binary before it gets encoded into the JS
-# file. The result is that the generated JS file is, because of the -g
+# file. The result is that the generated JS file is, because of the -g3
 # debugging info, _huge_.
 ########################################################################
 
-sqlite3.js := $(dir.dout)/sqlite3.js
+########################################################################
+# AN EXPERIMENT: undocumented Emscripten feature: if the target file
+# extension is "mjs", it defaults to ES6 module builds:
+# https://github.com/emscripten-core/emscripten/issues/14383
+ifeq (,$(filter esm,$(MAKECMDGOALS)))
+sqlite3.js.ext := js
+else
+esm.deps := $(filter-out esm,$(MAKECMDGOALS))
+esm: $(if $(esm.deps),$(esm.deps),all)
+sqlite3.js.ext := mjs
+endif
+# /esm
+########################################################################
+sqlite3.js := $(dir.dout)/sqlite3.$(sqlite3.js.ext)
 sqlite3.wasm := $(dir.dout)/sqlite3.wasm
 sqlite3-wasm.c := $(dir.api)/sqlite3-wasm.c
 # sqlite3-wasm.o vs sqlite3-wasm.c: building against the latter
@@ -449,11 +487,12 @@ all: batch
 speedtest1-common.eflags := $(emcc_opt_full)
 speedtest1.eflags :=
 speedtest1.eflags += -sENVIRONMENT=web
+speedtest1.eflags += -sALLOW_MEMORY_GROWTH
+speedtest1.eflags += -sINITIAL_MEMORY=$(emcc.INITIAL_MEMORY.$(emcc.INITIAL_MEMORY))
 speedtest1-common.eflags += -sINVOKE_RUN=0
 speedtest1-common.eflags += --no-entry
 #speedtest1-common.eflags += -flto
 speedtest1-common.eflags += -sABORTING_MALLOC
-speedtest1-common.eflags += -sINITIAL_MEMORY=128450560
 speedtest1-common.eflags += -sSTRICT_JS
 speedtest1-common.eflags += -sMODULARIZE
 speedtest1-common.eflags += -Wno-limited-postlink-optimizations
@@ -464,7 +503,7 @@ speedtest1-common.eflags += -sALLOW_TABLE_GROWTH
 speedtest1-common.eflags += -sDYNAMIC_EXECUTION=0
 speedtest1-common.eflags += --minify 0
 speedtest1-common.eflags += -sEXPORT_NAME=$(sqlite3.js.init-func)
-speedtest1-common.eflags += -sWASM_BIGINT=$(emcc_enable_bigint)
+speedtest1-common.eflags += -sWASM_BIGINT=$(emcc.WASM_BIGINT)
 speedtest1-common.eflags += $(pre-post-common.flags) 
 speedtest1.exit-runtime0 := -sEXIT_RUNTIME=0
 speedtest1.exit-runtime1 := -sEXIT_RUNTIME=1
@@ -542,12 +581,14 @@ oz: clean
 
 include fiddle.make
 
-ifneq (,$(filter wasmfs,$(MAKECMDGOALS)))
-# wasmfs build disabled 2022-10-19 per /chat
-# discussion. OPFS-over-wasmfs was initially a stopgap measure and a
-# convenient point of comparison for the OPFS sqlite3_vfs's
-# performance, but it currently doubles our deliverables and build
-# maintenance burden for very little, if any, benefit.
+# Only add wasmfs if wasmfs.enable=1 or we're running (dist)clean
+wasmfs.enable ?= $(if $(filter %clean,$(MAKECMDGOALS)),1,0)
+ifeq (1,$(wasmfs.enable))
+# wasmfs build disabled 2022-10-19 per /chat discussion.
+# OPFS-over-wasmfs was initially a stopgap measure and a convenient
+# point of comparison for the OPFS sqlite3_vfs's performance, but it
+# currently doubles our deliverables and build maintenance burden for
+# little, if any, benefit.
 #
 ########################################################################
 # Some platforms do not support the WASMFS build. Raspberry Pi OS is one
