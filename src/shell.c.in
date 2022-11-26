@@ -1066,9 +1066,11 @@ INCLUDE ../ext/expert/sqlite3expert.c
 #define SQLITE_SHELL_HAVE_RECOVER 0
 #endif
 #if SQLITE_SHELL_HAVE_RECOVER
-INCLUDE ../ext/recover/dbdata.c
 INCLUDE ../ext/recover/sqlite3recover.h
+# ifndef SQLITE_HAVE_SQLITE3R
+INCLUDE ../ext/recover/dbdata.c
 INCLUDE ../ext/recover/sqlite3recover.c
+# endif
 #endif
 
 #if defined(SQLITE_ENABLE_SESSION)
@@ -10959,13 +10961,11 @@ static int line_is_command_terminator(char *zLine){
 }
 
 /*
-** We need a default sqlite3_complete() implementation to use in case
-** the shell is compiled with SQLITE_OMIT_COMPLETE.  The default assumes
-** any arbitrary text is a complete SQL statement.  This is not very
-** user-friendly, but it does seem to work.
+** The CLI needs a working sqlite3_complete() to work properly.  So error
+** out of the build if compiling with SQLITE_OMIT_COMPLETE.
 */
 #ifdef SQLITE_OMIT_COMPLETE
-#define sqlite3_complete(x) 1
+# error the CLI application is imcompatable with SQLITE_OMIT_COMPLETE.
 #endif
 
 /*
@@ -11254,8 +11254,42 @@ static char *find_home_dir(int clearFlag){
 }
 
 /*
+** On non-Windows platforms, look for $XDG_CONFIG_HOME.
+** If ${XDG_CONFIG_HOME}/sqlite3/sqliterc is found, return
+** the path to it, else return 0. The result is cached for
+** subsequent calls.
+*/
+static const char *find_xdg_config(void){
+#if defined(_WIN32) || defined(WIN32) || defined(_WIN32_WCE) \
+     || defined(__RTP__) || defined(_WRS_KERNEL)
+  return 0;
+#else
+  static int alreadyTried = 0;
+  static char *zConfig = 0;
+  const char *zXdgHome;
+
+  if( alreadyTried!=0 ){
+    return zConfig;
+  }
+  alreadyTried = 1;
+  zXdgHome = getenv("XDG_CONFIG_HOME");
+  if( zXdgHome==0 ){
+    return 0;
+  }
+  zConfig = sqlite3_mprintf("%s/sqlite3/sqliterc", zXdgHome);
+  shell_check_oom(zConfig);
+  if( access(zConfig,0)!=0 ){
+    sqlite3_free(zConfig);
+    zConfig = 0;
+  }
+  return zConfig;
+#endif
+}
+
+/*
 ** Read input from the file given by sqliterc_override.  Or if that
-** parameter is NULL, take input from ~/.sqliterc
+** parameter is NULL, take input from the first of find_xdg_config()
+** or ~/.sqliterc which is found.
 **
 ** Returns the number of errors.
 */
@@ -11269,7 +11303,10 @@ static void process_sqliterc(
   FILE *inSaved = p->in;
   int savedLineno = p->lineno;
 
-  if (sqliterc == NULL) {
+  if( sqliterc == NULL ){
+    sqliterc = find_xdg_config();
+  }
+  if( sqliterc == NULL ){
     home_dir = find_home_dir(0);
     if( home_dir==0 ){
       raw_printf(stderr, "-- warning: cannot find home directory;"
@@ -11732,7 +11769,7 @@ int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
     if( pVfs ){
       sqlite3_vfs_register(pVfs, 1);
     }else{
-      utf8_printf(stderr, "no such VFS: \"%s\"\n", argv[i]);
+      utf8_printf(stderr, "no such VFS: \"%s\"\n", zVfs);
       exit(1);
     }
   }
