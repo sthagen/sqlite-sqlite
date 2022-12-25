@@ -539,7 +539,7 @@ self.sqlite3InitModule = sqlite3InitModule;
         }
         w.dealloc(m);
       }
-      
+
       // isPtr32()
       {
         const ip = w.isPtr32;
@@ -743,6 +743,65 @@ self.sqlite3InitModule = sqlite3InitModule;
             .assert('HI' === cj(new Uint8Array([72, 73])));
         });
 
+        // jsFuncToWasm()
+        {
+          const fsum3 = (x,y,z)=>x+y+z;
+          fw = w.jsFuncToWasm('i(iii)', fsum3);
+          T.assert(fw instanceof Function)
+            .assert( fsum3 !== fw )
+            .assert( 3 === fw.length )
+            .assert( 6 === fw(1,2,3) );
+          T.mustThrowMatching( ()=>w.jsFuncToWasm('x()', function(){}),
+                               'Invalid signature letter: x');
+        }
+
+        // xWrap(Function,...)
+        {
+          let fp;
+          try {
+            const fmy = function fmy(i,s,d){
+              if(fmy.debug) log("fmy(",...arguments,")");
+              T.assert( 3 === i )
+                .assert( w.isPtr(s) )
+                .assert( w.cstrToJs(s) === 'a string' )
+                .assert( T.eqApprox(1.2, d) );
+              return w.allocCString("hi");
+            };
+            fmy.debug = false;
+            const xwArgs = ['string:dealloc', ['i32', 'string', 'f64']];
+            fw = w.xWrap(fmy, ...xwArgs);
+            const fmyArgs = [3, 'a string', 1.2];
+            let rc = fw(...fmyArgs);
+            T.assert( 'hi' === rc );
+            if(0){
+              /* Retain this as a "reminder to self"...
+
+                 This extra level of indirection does not work: the
+                 string argument is ending up as a null in fmy() but
+                 the numeric arguments are making their ways through
+
+                 What's happening is: installFunction() is creating a
+                 WASM-compatible function instance. When we pass a JS string
+                 into there it's getting coerced into `null` before being passed
+                 on to the lower-level wrapper.
+              */
+              fmy.debug = true;
+              fp = wasm.installFunction('i(isd)', fw);
+              fw = w.functionEntry(fp);
+              rc = fw(...fmyArgs);
+              log("rc =",rc);
+              T.assert( 'hi' === rc );
+              // Similarly, this does not work:
+              //let fpw = w.xWrap(fp, null, [null,null,null]);
+              //rc = fpw(...fmyArgs);
+              //log("rc =",rc);
+              //T.assert( 'hi' === rc );
+            }
+          }finally{
+            wasm.uninstallFunction(fp);
+          }
+        }
+
         if(haveWasmCTests()){
           if(!sqlite3.config.useStdAlloc){
             fw = w.xWrap('sqlite3_wasm_test_str_hello', 'utf8:dealloc',['i32']);
@@ -768,7 +827,7 @@ self.sqlite3InitModule = sqlite3InitModule;
             });
           }
         }
-      }
+      }/*xWrap()*/
     }/*WhWasmUtil*/)
 
   ////////////////////////////////////////////////////////////////////
@@ -997,7 +1056,6 @@ self.sqlite3InitModule = sqlite3InitModule;
         P.restore(stack);
       }
     }/*pstack tests*/)
-
   ////////////////////////////////////////////////////////////////////
   ;/*end of C/WASM utils checks*/
 
@@ -1161,7 +1219,7 @@ self.sqlite3InitModule = sqlite3InitModule;
     })
 
   ////////////////////////////////////////////////////////////////////
-    .t('DB.Stmt', function(S){
+    .t('DB.Stmt', function(sqlite3){
       let st = this.db.prepare(
         new TextEncoder('utf-8').encode("select 3 as a")
       );
@@ -1216,6 +1274,12 @@ self.sqlite3InitModule = sqlite3InitModule;
       }
       T.assert(!st.pointer)
         .assert(0===this.db.openStatementCount());
+
+      T.mustThrowMatching(()=>new sqlite3.oo1.Stmt("hi"), function(err){
+        return (err instanceof sqlite3.SQLite3Error)
+          && capi.SQLITE_MISUSE === err.resultCode
+          && 0 < err.message.indexOf("Do not call the Stmt constructor directly.")
+      });
     })
 
   ////////////////////////////////////////////////////////////////////////
@@ -1333,6 +1397,14 @@ self.sqlite3InitModule = sqlite3InitModule;
                db.selectValue("SELECT "+Number.MIN_SAFE_INTEGER)).
         assert(Number.MAX_SAFE_INTEGER ===
                db.selectValue("SELECT "+Number.MAX_SAFE_INTEGER));
+
+      counter = 0;
+      db.exec({
+        sql: "SELECT a FROM t",
+        callback: ()=>(1===++counter),
+      });
+      T.assert(2===counter,
+               "Expecting exec step() loop to stop if callback returns false.");
       if(wasm.bigIntEnabled && haveWasmCTests()){
         const mI = wasm.xCall('sqlite3_wasm_test_int64_max');
         const b = BigInt(Number.MAX_SAFE_INTEGER * 2);
@@ -1553,6 +1625,7 @@ self.sqlite3InitModule = sqlite3InitModule;
         db.createFunction("bar", {
           arity: -1,
           xFunc: (pCx,...args)=>{
+            T.assert(db.pointer === capi.sqlite3_context_db_handle(pCx));
             let rc = 0;
             for(const v of args) rc += v;
             return rc;
@@ -1576,7 +1649,10 @@ self.sqlite3InitModule = sqlite3InitModule;
           assert(T.eqApprox(1.3,db.selectValue("select asis(1 + 0.3)")));
 
         let blobArg = new Uint8Array([0x68, 0x69]);
-        let blobRc = db.selectValue("select asis(?1)", blobArg);
+        let blobRc = db.selectValue(
+          "select asis(?1)",
+          blobArg.buffer/*confirm that ArrayBuffer is handled as a Uint8Array*/
+        );
         T.assert(blobRc instanceof Uint8Array).
           assert(2 === blobRc.length).
           assert(0x68==blobRc[0] && 0x69==blobRc[1]);
@@ -1592,6 +1668,19 @@ self.sqlite3InitModule = sqlite3InitModule;
           assert(2 === blobRc.length);
         //debug("blobRc=",blobRc);
         T.assert(0x68==blobRc[0] && 0x69==blobRc[1]);
+
+        let rc = sqlite3.capi.sqlite3_create_function_v2(
+          this.db, "foo", 0, -1, 0, 0, 0, 0, 0
+        );
+        T.assert(
+          sqlite3.capi.SQLITE_FORMAT === rc,
+          "For invalid eTextRep argument."
+        );
+        rc = sqlite3.capi.sqlite3_create_function_v2(this.db, "foo", 0);
+        T.assert(
+          sqlite3.capi.SQLITE_MISUSE === rc,
+          "For invalid arg count."
+        );
       }
     })
 
@@ -1794,18 +1883,18 @@ self.sqlite3InitModule = sqlite3InitModule;
       T.assert(3===resultRows.length)
         .assert(2===resultRows[1]);
       T.assert(2===db.selectValue('select a from foo.bar where a>1 order by a'));
+
+      /** Demonstrate the JS-simplified form of the sqlite3_exec() callback... */
       let colCount = 0, rowCount = 0;
-      const execCallback = function(pVoid, nCols, aVals, aNames){
-        //console.warn("execCallback(",arguments,")");
-        colCount = nCols;
-        ++rowCount;
-        T.assert(2===aVals.length)
-          .assert(2===aNames.length)
-          .assert(+(aVals[1]) === 2 * +(aVals[0]));
-      };
       let rc = capi.sqlite3_exec(
-        db.pointer, "select a, a*2 from foo.bar", execCallback,
-        0, 0
+        db, "select a, a*2 from foo.bar", function(aVals, aNames){
+          //console.warn("execCallback(",arguments,")");
+          colCount = aVals.length;
+          ++rowCount;
+          T.assert(2===aVals.length)
+            .assert(2===aNames.length)
+            .assert(+(aVals[1]) === 2 * +(aVals[0]));
+        }, 0, 0
       );
       T.assert(0===rc).assert(3===rowCount).assert(2===colCount);
       rc = capi.sqlite3_exec(
@@ -1814,8 +1903,45 @@ self.sqlite3InitModule = sqlite3InitModule;
         }, 0, 0
       );
       T.assert(capi.SQLITE_ABORT === rc);
+
+      /* Demonstrate how to get access to the "full" callback
+         signature, as opposed to the simplified JS-specific one... */
+      rowCount = colCount = 0;
+      const pCb = wasm.installFunction('i(pipp)', function(pVoid,nCols,aVals,aCols){
+        /* Tip: wasm.cArgvToJs() can be used to convert aVals and
+           aCols to arrays: const vals = wasm.cArgvToJs(nCols,
+           aVals); */
+        ++rowCount;
+        colCount = nCols;
+        T.assert(2 === nCols)
+          .assert(wasm.isPtr(pVoid))
+          .assert(wasm.isPtr(aVals))
+          .assert(wasm.isPtr(aCols))
+          .assert(+wasm.cstrToJs(wasm.peekPtr(aVals + wasm.ptrSizeof))
+                  === 2 * +wasm.cstrToJs(wasm.peekPtr(aVals)));
+        return 0;
+      });
+      try {
+        T.assert(wasm.isPtr(pCb));
+        rc = capi.sqlite3_exec(db, "select a, a*2 from foo.bar", pCb, 0, 0);
+        T.assert(0===rc)
+          .assert(3===rowCount)
+          .assert(2===colCount);
+      }finally{
+        wasm.uninstallFunction(pCb);
+      }
+
+      // Demonstrate that an OOM result does not propagate through sqlite3_exec()...
+      rc = capi.sqlite3_exec(
+        db, "select a, a*2 from foo.bar", function(aVals, aNames){
+          sqlite3.WasmAllocError.toss("just testing");
+        }, 0, 0
+      );
+      T.assert(capi.SQLITE_ABORT === rc);
+
       db.exec("detach foo");
-      T.mustThrow(()=>db.exec("select * from foo.bar"));
+      T.mustThrow(()=>db.exec("select * from foo.bar"),
+                  "Because foo is no longer attached.");
     })
 
   ////////////////////////////////////////////////////////////////////
@@ -1899,7 +2025,6 @@ self.sqlite3InitModule = sqlite3InitModule;
       name: 'virtual table #1: eponymous w/ manual exception handling',
       predicate: ()=>!!capi.sqlite3_index_info,
       test: function(sqlite3){
-        warn("The vtab/module JS bindings are experimental and subject to change.");
         const VT = sqlite3.vtab;
         const tmplCols = Object.assign(Object.create(null),{
           A: 0, B: 1
@@ -2097,7 +2222,6 @@ self.sqlite3InitModule = sqlite3InitModule;
       name: 'virtual table #2: non-eponymous w/ automated exception wrapping',
       predicate: ()=>!!capi.sqlite3_index_info,
       test: function(sqlite3){
-        warn("The vtab/module JS bindings are experimental and subject to change.");
         const VT = sqlite3.vtab;
         const tmplCols = Object.assign(Object.create(null),{
           A: 0, B: 1
@@ -2275,7 +2399,7 @@ self.sqlite3InitModule = sqlite3InitModule;
       T.assert(0===rc).assert(3===collationCounter);
       rc = capi.sqlite3_create_collation(this.db,"hi",capi.SQLITE_UTF8/*not enough args*/);
       T.assert(capi.SQLITE_MISUSE === rc);
-      rc = capi.sqlite3_create_collation_v2(this.db,"hi",0/*wrong encoding*/,0,0,0);
+      rc = capi.sqlite3_create_collation_v2(this.db,"hi",capi.SQLITE_UTF8+1/*invalid encoding*/,0,0,0);
       T.assert(capi.SQLITE_FORMAT === rc)
         .mustThrowMatching(()=>this.db.checkRc(rc),
                            /SQLITE_UTF8 is the only supported encoding./);
@@ -2486,7 +2610,7 @@ self.sqlite3InitModule = sqlite3InitModule;
             capi.sqlite3_js_vfs_create_file(
               "no-such-vfs", filename, ba
             );
-          }, "Unknown sqlite3_vfs name: no-such-vfs");
+          }, "SQLITE_NOTFOUND: Unknown sqlite3_vfs name: no-such-vfs");
         }finally{
           if(sh) await sh.close();
           unlink();

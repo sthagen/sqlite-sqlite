@@ -973,9 +973,9 @@ typedef INT16_TYPE LogEst;
 ** pointers.  In that case, only verify 4-byte alignment.
 */
 #ifdef SQLITE_4_BYTE_ALIGNED_MALLOC
-# define EIGHT_BYTE_ALIGNMENT(X)   ((((char*)(X) - (char*)0)&3)==0)
+# define EIGHT_BYTE_ALIGNMENT(X)   ((((uptr)(X) - (uptr)0)&3)==0)
 #else
-# define EIGHT_BYTE_ALIGNMENT(X)   ((((char*)(X) - (char*)0)&7)==0)
+# define EIGHT_BYTE_ALIGNMENT(X)   ((((uptr)(X) - (uptr)0)&7)==0)
 #endif
 
 /*
@@ -2795,6 +2795,9 @@ struct AggInfo {
   } *aFunc;
   int nFunc;              /* Number of entries in aFunc[] */
   u32 selId;              /* Select to which this AggInfo belongs */
+#ifdef SQLITE_DEBUG
+  Select *pSelect;        /* SELECT statement that this AggInfo supports */
+#endif
 };
 
 /*
@@ -3635,10 +3638,10 @@ struct TriggerPrg {
 #else
   typedef unsigned int yDbMask;
 # define DbMaskTest(M,I)    (((M)&(((yDbMask)1)<<(I)))!=0)
-# define DbMaskZero(M)      (M)=0
-# define DbMaskSet(M,I)     (M)|=(((yDbMask)1)<<(I))
-# define DbMaskAllZero(M)   (M)==0
-# define DbMaskNonZero(M)   (M)!=0
+# define DbMaskZero(M)      ((M)=0)
+# define DbMaskSet(M,I)     ((M)|=(((yDbMask)1)<<(I)))
+# define DbMaskAllZero(M)   ((M)==0)
+# define DbMaskNonZero(M)   ((M)!=0)
 #endif
 
 /*
@@ -5211,7 +5214,7 @@ int sqlite3ApiExit(sqlite3 *db, int);
 int sqlite3OpenTempDatabase(Parse *);
 
 void sqlite3StrAccumInit(StrAccum*, sqlite3*, char*, int, int);
-int sqlite3StrAccumEnlarge(StrAccum*, int);
+int sqlite3StrAccumEnlarge(StrAccum*, i64);
 char *sqlite3StrAccumFinish(StrAccum*);
 void sqlite3StrAccumSetError(StrAccum*, u8);
 void sqlite3ResultStrAccum(sqlite3_context*,StrAccum*);

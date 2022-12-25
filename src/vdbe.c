@@ -133,6 +133,9 @@ int sqlite3_found_count = 0;
 */
 static void test_trace_breakpoint(int pc, Op *pOp, Vdbe *v){
   static int n = 0;
+  (void)pc;
+  (void)pOp;
+  (void)v;
   n++;
 }
 #endif
@@ -713,6 +716,7 @@ int sqlite3VdbeExec(
 #ifdef SQLITE_DEBUG
   Op *pOrigOp;               /* Value of pOp at the top of the loop */
   int nExtraDelete = 0;      /* Verifies FORDELETE and AUXDELETE flags */
+  u8 iCompareIsInit = 0;     /* iCompare is initialized */
 #endif
   int rc = SQLITE_OK;        /* Value to return */
   sqlite3 *db = p->db;       /* The database */
@@ -734,7 +738,9 @@ int sqlite3VdbeExec(
   /*** INSERT STACK UNION HERE ***/
 
   assert( p->eVdbeState==VDBE_RUN_STATE );  /* sqlite3_step() verifies this */
-  sqlite3VdbeEnter(p);
+  if( DbMaskNonZero(p->lockMask) ){
+    sqlite3VdbeEnter(p);
+  }
 #ifndef SQLITE_OMIT_PROGRESS_CALLBACK
   if( db->xProgress ){
     u32 iPrior = p->aCounter[SQLITE_STMTSTATUS_VM_STEP];
@@ -755,7 +761,6 @@ int sqlite3VdbeExec(
   assert( p->bIsReader || p->readOnly!=0 );
   p->iCurrentTime = 0;
   assert( p->explain==0 );
-  p->pResultSet = 0;
   db->busyHandler.nBusy = 0;
   if( AtomicLoad(&db->u1.isInterrupted) ) goto abort_due_to_interrupt;
   sqlite3VdbeIOTraceSql(p);
@@ -1586,10 +1591,10 @@ case OP_ResultRow: {
   assert( pOp->p1+pOp->p2<=(p->nMem+1 - p->nCursor)+1 );
 
   p->cacheCtr = (p->cacheCtr + 2)|1;
-  p->pResultSet = &aMem[pOp->p1];
+  p->pResultRow = &aMem[pOp->p1];
 #ifdef SQLITE_DEBUG
   {
-    Mem *pMem = p->pResultSet;
+    Mem *pMem = p->pResultRow;
     int i;
     for(i=0; i<pOp->p2; i++){
       assert( memIsValid(&pMem[i]) );
@@ -2126,18 +2131,21 @@ case OP_Ge: {             /* same as TK_GE, jump, in1, in3 */
         goto jump_to_p2;
       }
       iCompare = +1;
+      VVA_ONLY( iCompareIsInit = 1; )
     }else if( pIn3->u.i < pIn1->u.i ){
       if( sqlite3aLTb[pOp->opcode] ){
         VdbeBranchTaken(1, (pOp->p5 & SQLITE_NULLEQ)?2:3);
         goto jump_to_p2;
       }
       iCompare = -1;
+      VVA_ONLY( iCompareIsInit = 1; )
     }else{
       if( sqlite3aEQb[pOp->opcode] ){
         VdbeBranchTaken(1, (pOp->p5 & SQLITE_NULLEQ)?2:3);
         goto jump_to_p2;
       }
       iCompare = 0;
+      VVA_ONLY( iCompareIsInit = 1; )
     }
     VdbeBranchTaken(0, (pOp->p5 & SQLITE_NULLEQ)?2:3);
     break;
@@ -2169,6 +2177,7 @@ case OP_Ge: {             /* same as TK_GE, jump, in1, in3 */
         goto jump_to_p2;
       }
       iCompare = 1;    /* Operands are not equal */
+      VVA_ONLY( iCompareIsInit = 1; )
       break;
     }
   }else{
@@ -2225,6 +2234,7 @@ case OP_Ge: {             /* same as TK_GE, jump, in1, in3 */
     res2 = sqlite3aGTb[pOp->opcode];
   }
   iCompare = res;
+  VVA_ONLY( iCompareIsInit = 1; )
 
   /* Undo any changes made by applyAffinity() to the input registers. */
   assert( (pIn3->flags & MEM_Dyn) == (flags3 & MEM_Dyn) );
@@ -2263,6 +2273,7 @@ case OP_ElseEq: {       /* same as TK_ESCAPE, jump */
     break;
   }
 #endif /* SQLITE_DEBUG */
+  assert( iCompareIsInit );
   VdbeBranchTaken(iCompare==0, 2);
   if( iCompare==0 ) goto jump_to_p2;
   break;
@@ -2357,6 +2368,7 @@ case OP_Compare: {
     pColl = pKeyInfo->aColl[i];
     bRev = (pKeyInfo->aSortFlags[i] & KEYINFO_ORDER_DESC);
     iCompare = sqlite3MemCompare(&aMem[p1+idx], &aMem[p2+idx], pColl);
+    VVA_ONLY( iCompareIsInit = 1; )
     if( iCompare ){
       if( (pKeyInfo->aSortFlags[i] & KEYINFO_ORDER_BIGNULL) 
        && ((aMem[p1+idx].flags & MEM_Null) || (aMem[p2+idx].flags & MEM_Null))
@@ -2381,6 +2393,7 @@ case OP_Compare: {
 */
 case OP_Jump: {             /* jump */
   assert( pOp>aOp && pOp[-1].opcode==OP_Compare );
+  assert( iCompareIsInit );
   if( iCompare<0 ){
     VdbeBranchTaken(0,4); pOp = &aOp[pOp->p1 - 1];
   }else if( iCompare==0 ){
@@ -5559,8 +5572,11 @@ case OP_Insert: {
   if( pOp->p5 & OPFLAG_ISNOOP ) break;
 #endif
 
-  if( pOp->p5 & OPFLAG_NCHANGE ) p->nChange++;
-  if( pOp->p5 & OPFLAG_LASTROWID ) db->lastRowid = x.nKey;
+  assert( (pOp->p5 & OPFLAG_LASTROWID)==0 || (pOp->p5 & OPFLAG_NCHANGE)!=0 );
+  if( pOp->p5 & OPFLAG_NCHANGE ){
+    p->nChange++;
+    if( pOp->p5 & OPFLAG_LASTROWID ) db->lastRowid = x.nKey;
+  }
   assert( (pData->flags & (MEM_Blob|MEM_Str))!=0 || pData->n==0 );
   x.pData = pData->z;
   x.nData = pData->n;
@@ -8827,7 +8843,9 @@ vdbe_return:
   }
 #endif
   p->aCounter[SQLITE_STMTSTATUS_VM_STEP] += (int)nVmStep;
-  sqlite3VdbeLeave(p);
+  if( DbMaskNonZero(p->lockMask) ){
+    sqlite3VdbeLeave(p);
+  }
   assert( rc!=SQLITE_OK || nExtraDelete==0 
        || sqlite3_strlike("DELETE%",p->zSql,0)!=0 
   );

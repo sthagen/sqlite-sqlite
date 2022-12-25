@@ -213,7 +213,10 @@ DISTCLEAN_FILES += $(bin.stripccomments)
 # https://fossil.wanderinghorse.net/r/c-pp
 bin.c-pp := ./c-pp
 $(bin.c-pp): c-pp.c $(sqlite3.c) $(MAKEFILE)
-	$(CC) -O0 -o $@ c-pp.c $(sqlite3.c) '-DCMPP_DEFAULT_DELIM="//#"' -I$(dir.top)
+	$(CC) -O0 -o $@ c-pp.c $(sqlite3.c) '-DCMPP_DEFAULT_DELIM="//#"' -I$(dir.top) \
+		-DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_OMIT_DEPRECATED -DSQLITE_OMIT_UTF16 \
+		-DSQLITE_OMIT_SHARED_CACHE -DSQLITE_OMIT_WAL -DSQLITE_THREADSAFE=0 \
+		-DSQLITE_TEMP_STORE=3
 define C-PP.FILTER
 # Create $2 from $1 using $(bin.c-pp)
 # $1 = Input file: c-pp -f $(1).js
@@ -605,7 +608,7 @@ $(sqlite3.mjs): $(pre-post-sqlite3.deps.esm)
 define SQLITE3.xJS.ESM-EXPORT-DEFAULT
 if [ esm = $(1) ]; then \
 		echo "Fragile workaround for an Emscripten annoyance. See SQLITE3.xJS.RECIPE."; \
-		sed -i -e '0,/^export default/{/^export default/d}' $@ || exit $$?; \
+		sed -i -e '0,/^export default/{/^export default/d;}' $@ || exit $$?; \
 		if ! grep -q '^export default' $@; then \
 			echo "Cannot find export default." 1>&2; \
 			exit 1; \
