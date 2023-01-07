@@ -394,7 +394,7 @@ static void applyAffinity(
     assert( affinity==SQLITE_AFF_INTEGER || affinity==SQLITE_AFF_REAL
              || affinity==SQLITE_AFF_NUMERIC || affinity==SQLITE_AFF_FLEXNUM );
     if( (pRec->flags & MEM_Int)==0 ){ /*OPTIMIZATION-IF-FALSE*/
-      if( (pRec->flags & MEM_Real)==0 ){
+      if( (pRec->flags & (MEM_Real|MEM_IntReal))==0 ){
         if( pRec->flags & MEM_Str ) applyNumericAffinity(pRec,1);
       }else if( affinity<=SQLITE_AFF_REAL ){
         sqlite3VdbeIntegerAffinity(pRec);
@@ -3142,7 +3142,7 @@ case OP_TypeCheck: {
         }
         case COLTYPE_REAL: {
           testcase( (pIn1->flags & (MEM_Real|MEM_IntReal))==MEM_Real );
-          testcase( (pIn1->flags & (MEM_Real|MEM_IntReal))==MEM_IntReal );
+          assert( (pIn1->flags & MEM_IntReal)==0 );
           if( pIn1->flags & MEM_Int ){
             /* When applying REAL affinity, if the result is still an MEM_Int
             ** that will fit in 6 bytes, then change the type to MEM_IntReal
