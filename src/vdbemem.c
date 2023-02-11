@@ -1508,8 +1508,6 @@ static int valueFromFunction(
     goto value_from_function_out;
   }
 
-  testcase( pCtx->pParse->rc==SQLITE_ERROR );
-  testcase( pCtx->pParse->rc==SQLITE_OK );
   memset(&ctx, 0, sizeof(ctx));
   ctx.pOut = pVal;
   ctx.pFunc = pFunc;
@@ -1521,17 +1519,22 @@ static int valueFromFunction(
   }else{
     sqlite3ValueApplyAffinity(pVal, aff, SQLITE_UTF8);
     assert( rc==SQLITE_OK );
+    assert( enc==pVal->enc
+         || (pVal->flags & MEM_Str)==0
+         || db->mallocFailed  );
+#if 0  /* Not reachable except after a prior failure */
     rc = sqlite3VdbeChangeEncoding(pVal, enc);
     if( rc==SQLITE_OK && sqlite3VdbeMemTooBig(pVal) ){
       rc = SQLITE_TOOBIG;
       pCtx->pParse->nErr++;
     }
+#endif
   }
-  pCtx->pParse->rc = rc;
 
  value_from_function_out:
   if( rc!=SQLITE_OK ){
     pVal = 0;
+    pCtx->pParse->rc = rc;
   }
   if( apVal ){
     for(i=0; i<nVal; i++){
