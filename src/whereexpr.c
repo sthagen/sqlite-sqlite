@@ -988,7 +988,9 @@ static SQLITE_NOINLINE int exprMightBeIndexed2(
       for(i=0; i<pIdx->nKeyCol; i++){
         if( pIdx->aiColumn[i]!=XN_EXPR ) continue;
         assert( pIdx->bHasExpr );
-        if( sqlite3ExprCompareSkip(pExpr,pIdx->aColExpr->a[i].pExpr,iCur)==0 ){
+        if( sqlite3ExprCompareSkip(pExpr,pIdx->aColExpr->a[i].pExpr,iCur)==0 
+          && pExpr->op!=TK_STRING
+        ){
           aiCurCol[0] = iCur;
           aiCurCol[1] = XN_EXPR;
           return 1;
@@ -1376,7 +1378,6 @@ static void exprAnalyze(
     transferJoinMarkings(pNewExpr1, pExpr);
     idxNew1 = whereClauseInsert(pWC, pNewExpr1, wtFlags);
     testcase( idxNew1==0 );
-    exprAnalyze(pSrc, pWC, idxNew1);
     pNewExpr2 = sqlite3ExprDup(db, pLeft, 0);
     pNewExpr2 = sqlite3PExpr(pParse, TK_LT,
            sqlite3ExprAddCollateString(pParse,pNewExpr2,zCollSeqName),
@@ -1384,6 +1385,7 @@ static void exprAnalyze(
     transferJoinMarkings(pNewExpr2, pExpr);
     idxNew2 = whereClauseInsert(pWC, pNewExpr2, wtFlags);
     testcase( idxNew2==0 );
+    exprAnalyze(pSrc, pWC, idxNew1);
     exprAnalyze(pSrc, pWC, idxNew2);
     pTerm = &pWC->a[idxTerm];
     if( isComplete ){
@@ -1440,7 +1442,7 @@ static void exprAnalyze(
    && pTerm->u.x.iField==0
    && pExpr->pLeft->op==TK_VECTOR
    && ALWAYS( ExprUseXSelect(pExpr) )
-   && pExpr->x.pSelect->pPrior==0
+   && (pExpr->x.pSelect->pPrior==0 || (pExpr->x.pSelect->selFlags & SF_Values))
 #ifndef SQLITE_OMIT_WINDOWFUNC
    && pExpr->x.pSelect->pWin==0
 #endif
