@@ -224,8 +224,8 @@
 #endif
 
 /*
-** WAL mode depends on atomic aligned 32-bit loads and stores in a few
-** places.  The following macros try to make this explicit.
+** A few places in the code require atomic load/store of aligned
+** integer values.
 */
 #ifndef __has_extension
 # define __has_extension(x) 0     /* compatibility with non-clang compilers */
@@ -1839,6 +1839,7 @@ struct sqlite3 {
    /* TH3 expects this value  ^^^^^^^^^^ See flatten04.test */
 #define SQLITE_IndexedExpr    0x01000000 /* Pull exprs from index when able */
 #define SQLITE_Coroutines     0x02000000 /* Co-routines for subqueries */
+#define SQLITE_NullUnusedCols 0x04000000 /* NULL unused columns in subqueries */
 #define SQLITE_AllOpts        0xffffffff /* All optimizations */
 
 /*
