@@ -171,8 +171,10 @@ SQLITE_OPT = \
   -DSQLITE_USE_URI=1 \
   -DSQLITE_WASM_ENABLE_C_TESTS
 
-$(sqlite3.c) $(sqlite3.h):
+.NOTPARALLEL: $(sqlite3.h)
+$(sqlite3.h):
 	$(MAKE) -C $(dir.top) sqlite3.c
+$(sqlite3.c): $(sqlite3.h)
 
 .PHONY: clean distclean
 clean:
@@ -187,6 +189,35 @@ ifeq (release,$(filter release,$(MAKECMDGOALS)))
   endif
 else
   $(info Development build. Use '$(MAKE) release' for a smaller release build.)
+endif
+
+########################################################################
+# Adding custom C code via sqlite3_wasm_extra_init.c:
+#
+# If the canonical build process finds the file
+# sqlite3_wasm_extra_init.c in the main wasm build directory, it
+# arranges to include that file in the build of sqlite3.wasm and
+# defines SQLITE_EXTRA_INIT=sqlite3_wasm_extra_init.
+#
+# sqlite3_wasm_extra_init() must be a function with this signature:
+#
+#  int sqlite3_wasm_extra_init(const char *)
+#
+# and the sqlite3 library will call it with an argument of NULL one
+# time during sqlite3_initialize(). If it returns non-0,
+# initialization of the library will fail.
+#
+# The filename can be overridden with:
+#
+#  make sqlite3_wasm_extra_init.c=my_custom_stuff.c
+#
+# See example_extra_init.c for an example implementation.
+########################################################################
+sqlite3_wasm_extra_init.c ?= $(wildcard sqlite3_wasm_extra_init.c)
+cflags.wasm_extra_init :=
+ifneq (,$(sqlite3_wasm_extra_init.c))
+  $(info Enabling SQLITE_EXTRA_INIT via $(sqlite3_wasm_extra_init.c).)
+  cflags.wasm_extra_init := -DSQLITE_WASM_EXTRA_INIT
 endif
 
 # bin.version-info = binary to output various sqlite3 version info for
@@ -576,6 +607,7 @@ endef
 # https://github.com/emscripten-core/emscripten/issues/14383
 sqlite3.wasm := $(dir.dout)/sqlite3.wasm
 sqlite3-wasm.c := $(dir.api)/sqlite3-wasm.c
+sqlite3-wasm.cses := $(sqlite3-wasm.c) $(sqlite3_wasm_extra_init.c)
 # sqlite3-wasm.o vs sqlite3-wasm.c: building against the latter
 # (predictably) results in a slightly faster binary. We're close
 # enough to the target speed requirements that the 500ms makes a
@@ -650,12 +682,12 @@ $$(eval $$(call call-make-pre-post,sqlite3,$(1)))
 emcc.flags.sqlite3.$(1) := $(6)
 $$(eval $$(call C-PP.FILTER, $$(sqlite3-api.js.in), $(3), $(5)))
 $(4): $(3)
-$(4): $(3) $$(MAKEFILE) $$(sqlite3-wasm.c) $$(EXPORTED_FUNCTIONS.api) $$(pre-post-sqlite3.deps.$(1))
+$(4): $(3) $$(MAKEFILE) $$(sqlite3-wasm.cses) $$(EXPORTED_FUNCTIONS.api) $$(pre-post-sqlite3.deps.$(1))
 	@echo "Building $$@ ..."
 	$$(emcc.bin) -o $$@ $$(emcc_opt_full) $$(emcc.flags) \
     $$(emcc.jsflags) \
     $$(pre-post-sqlite3.flags.$(1)) $$(emcc.flags.sqlite3.$(1)) \
-    $$(cflags.common) $$(SQLITE_OPT) $$(sqlite3-wasm.c)
+    $$(cflags.common) $$(SQLITE_OPT) $$(cflags.wasm_extra_init) $$(sqlite3-wasm.cses)
 	@$$(call SQLITE3.xJS.ESM-EXPORT-DEFAULT,$(2))
 	@if [ bundler-friendly = $(1) ]; then \
 		echo "Patching $(3) for sqlite3.wasm..."; \
@@ -698,11 +730,11 @@ $(eval $(call SETUP_LIB_BUILD_MODE,bundler-friendly,1,\
 #
 ########################################################################
 ########################################################################
-# We have to ensure that we do not build both $(sqlite3*.*js) in
-# parallel because both result in the creation of $(sqlite3.wasm). We
-# have no way to build just the .mjs file without also building the
-# .wasm file because the generated .mjs file has to include info about
-# the imports needed by the wasm file, so they have to be built
+# We have to ensure that we do not build $(sqlite3*.*js) in parallel
+# because they all result in the creation of $(sqlite3.wasm). We have
+# no way to build just a .[m]js file without also building the .wasm
+# file because the generated .[m]js file has to include info about the
+# imports needed by the wasm file, so they have to be built
 # together. i.e.  we're building $(sqlite3.wasm) multiple times, but
 # that's unavoidable (and harmless, just a waste of build time).
 $(sqlite3.wasm): $(sqlite3.js)

@@ -3861,7 +3861,7 @@ static Expr *substExpr(
         sqlite3VectorErrorMsg(pSubst->pParse, pCopy);
       }else{
         sqlite3 *db = pSubst->pParse->db;
-        if( pSubst->isOuterJoin && pCopy->op!=TK_COLUMN ){
+        if( pSubst->isOuterJoin ){
           memset(&ifNullRow, 0, sizeof(ifNullRow));
           ifNullRow.op = TK_IF_NULL_ROW;
           ifNullRow.pLeft = pCopy;
@@ -5288,6 +5288,7 @@ static int disableUnusedSubqueryResultColumns(SrcItem *pItem){
       Expr *pY = pX->pEList->a[j].pExpr;
       if( pY->op==TK_NULL ) continue;
       pY->op = TK_NULL;
+      ExprClearProperty(pY, EP_Skip|EP_Unlikely);
       pX->selFlags |= SF_PushDown;
       nChng++;
     }
@@ -6875,7 +6876,8 @@ static int countOfViewOptimization(Parse *pParse, Select *p){
   if( ExprHasProperty(pExpr, EP_WinFunc) ) return 0;/* Not a window function */
   pSub = p->pSrc->a[0].pSelect;
   if( pSub==0 ) return 0;                           /* The FROM is a subquery */
-  if( pSub->pPrior==0 ) return 0;                   /* Must be a compound ry */
+  if( pSub->pPrior==0 ) return 0;                   /* Must be a compound */
+  if( pSub->selFlags & SF_CopyCte ) return 0;       /* Not a CTE */
   do{
     if( pSub->op!=TK_ALL && pSub->pPrior ) return 0;  /* Must be UNION ALL */
     if( pSub->pWhere ) return 0;                      /* No WHERE clause */

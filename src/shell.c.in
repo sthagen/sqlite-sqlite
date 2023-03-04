@@ -5309,6 +5309,7 @@ static void open_db(ShellState *p, int openFlags){
       }
       exit(1);
     }
+    sqlite3_db_config(p->db, SQLITE_DBCONFIG_STMT_SCANSTATUS, (int)0, (int*)0);
 
 #ifndef SQLITE_OMIT_LOAD_EXTENSION
     sqlite3_enable_load_extension(p->db, 1);
@@ -5324,9 +5325,6 @@ static void open_db(ShellState *p, int openFlags){
 #ifndef SQLITE_SHELL_FIDDLE
     sqlite3_fileio_init(p->db, 0, 0);
     sqlite3_completion_init(p->db, 0, 0);
-#endif
-#if SQLITE_SHELL_HAVE_RECOVER
-    sqlite3_dbdata_init(p->db, 0, 0);
 #endif
 #ifdef SQLITE_HAVE_ZLIB
     if( !p->bSafeModePersist ){
@@ -5416,8 +5414,13 @@ static void open_db(ShellState *p, int openFlags){
     }
 #endif
   }
-  if( p->bSafeModePersist && p->db!=0 ){
-    sqlite3_set_authorizer(p->db, safeModeAuth, p);
+  if( p->db!=0 ){
+    if( p->bSafeModePersist ){
+      sqlite3_set_authorizer(p->db, safeModeAuth, p);
+    }
+    sqlite3_db_config(
+        p->db, SQLITE_DBCONFIG_STMT_SCANSTATUS, p->scanstatsOn, (int*)0
+    );
   }
 }
 
@@ -9769,6 +9772,9 @@ static int do_meta_command(char *zLine, ShellState *p){
       }else{
         p->scanstatsOn = (u8)booleanValue(azArg[1]);
       }
+      sqlite3_db_config(
+          p->db, SQLITE_DBCONFIG_STMT_SCANSTATUS, p->scanstatsOn, (int*)0
+      );
 #ifndef SQLITE_ENABLE_STMT_SCANSTATUS
       raw_printf(stderr, "Warning: .scanstats not available in this build.\n");
 #endif
@@ -12318,6 +12324,7 @@ int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
         }
       }else{
         open_db(&data, 0);
+        echo_group_input(&data, azCmd[i]);
         rc = shell_exec(&data, azCmd[i], &zErrMsg);
         if( zErrMsg || rc ){
           if( zErrMsg!=0 ){

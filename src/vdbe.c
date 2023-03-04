@@ -683,8 +683,10 @@ static u64 filterHash(const Mem *aMem, const Op *pOp){
     }else if( p->flags & MEM_Real ){
       h += sqlite3VdbeIntValue(p);
     }else if( p->flags & (MEM_Str|MEM_Blob) ){
-      h += p->n;
-      if( p->flags & MEM_Zero ) h += p->u.nZero;
+      /* All strings have the same hash and all blobs have the same hash,
+      ** though, at least, those hashes are different from each other and
+      ** from NULL. */
+      h += 4093 + (p->flags & (MEM_Str|MEM_Blob));
     }
   }
   return h;
@@ -734,6 +736,7 @@ int sqlite3VdbeExec(
   Mem *pOut = 0;             /* Output operand */
 #if defined(SQLITE_ENABLE_STMT_SCANSTATUS) || defined(VDBE_PROFILE)
   u64 *pnCycle = 0;
+  int bStmtScanStatus = IS_STMT_SCANSTATUS(db)!=0;
 #endif
   /*** INSERT STACK UNION HERE ***/
 
@@ -798,13 +801,17 @@ int sqlite3VdbeExec(
 
     assert( pOp>=aOp && pOp<&aOp[p->nOp]);
     nVmStep++;
-#if defined(SQLITE_ENABLE_STMT_SCANSTATUS) || defined(VDBE_PROFILE)
+
+#if defined(VDBE_PROFILE)
     pOp->nExec++;
     pnCycle = &pOp->nCycle;
-# ifdef VDBE_PROFILE
-    if( sqlite3NProfileCnt==0 )
-# endif
+    if( sqlite3NProfileCnt==0 ) *pnCycle -= sqlite3Hwtime();
+#elif defined(SQLITE_ENABLE_STMT_SCANSTATUS)
+    if( bStmtScanStatus ){
+      pOp->nExec++;
+      pnCycle = &pOp->nCycle;
       *pnCycle -= sqlite3Hwtime();
+    }
 #endif
 
     /* Only allow tracing if SQLITE_DEBUG is defined.
@@ -8756,8 +8763,10 @@ default: {          /* This is really OP_Noop, OP_Explain */
     *pnCycle += sqlite3NProfileCnt ? sqlite3NProfileCnt : sqlite3Hwtime();
     pnCycle = 0;
 #elif defined(SQLITE_ENABLE_STMT_SCANSTATUS)
-    *pnCycle += sqlite3Hwtime();
-    pnCycle = 0;
+    if( pnCycle ){
+      *pnCycle += sqlite3Hwtime();
+      pnCycle = 0;
+    }
 #endif
 
     /* The following code adds nothing to the actual functionality
