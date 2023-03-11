@@ -168,11 +168,6 @@
 #endif
 
 #include <assert.h>
-#include "sqlite3.c" /* yes, .c instead of .h. */
-
-#if defined(__EMSCRIPTEN__)
-#  include <emscripten/console.h>
-#endif
 
 /*
 ** SQLITE_WASM_EXPORT is functionally identical to EMSCRIPTEN_KEEPALIVE
@@ -201,6 +196,30 @@
 // See also:
 //__attribute__((export_name("theExportedName"), used, visibility("default")))
 
+/*
+** Which sqlite3.c we're using needs to be configurable to enable
+** building against a custom copy, e.g. the SEE variant. Note that we
+** #include the .c file, rather than the header, so that the WASM
+** extensions have access to private API internals.
+**
+** The caveat here is that custom variants need to account for
+** exporting any necessary symbols (e.g. sqlite3_activate_see()).  We
+** cannot export them from here using SQLITE_WASM_EXPORT because that
+** attribute (apparently) has to be part of the function definition.
+*/
+#ifndef SQLITE_C
+# define SQLITE_C sqlite3.c /* yes, .c instead of .h. */
+#endif
+#define INC__STRINGIFY_(f) #f
+#define INC__STRINGIFY(f) INC__STRINGIFY_(f)
+#include INC__STRINGIFY(SQLITE_C)
+#undef INC__STRINGIFY_
+#undef INC__STRINGIFY
+#undef SQLITE_C
+
+#if defined(__EMSCRIPTEN__)
+#  include <emscripten/console.h>
+#endif
 
 #if 0
 /*
@@ -476,6 +495,7 @@ const char * sqlite3_wasm_enum_json(void){
     DefInt(SQLITE_CHANGESETSTART_INVERT);
     DefInt(SQLITE_CHANGESETAPPLY_NOSAVEPOINT);
     DefInt(SQLITE_CHANGESETAPPLY_INVERT);
+    DefInt(SQLITE_CHANGESETAPPLY_IGNORENOOP);
 
     DefInt(SQLITE_CHANGESET_DATA);
     DefInt(SQLITE_CHANGESET_NOTFOUND);
@@ -618,6 +638,7 @@ const char * sqlite3_wasm_enum_json(void){
     DefInt(SQLITE_FCNTL_CKPT_START);
     DefInt(SQLITE_FCNTL_EXTERNAL_READER);
     DefInt(SQLITE_FCNTL_CKSM_FILE);
+    DefInt(SQLITE_FCNTL_RESET_CACHE);
   } _DefGroup;
 
   DefGroup(flock) {
