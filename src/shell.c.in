@@ -2774,6 +2774,7 @@ static char *shell_error_context(const char *zSql, sqlite3 *db){
   if( db==0
    || zSql==0
    || (iOffset = sqlite3_error_offset(db))<0
+   || iOffset>=strlen(zSql)
   ){
     return sqlite3_mprintf("");
   }
@@ -11465,9 +11466,9 @@ static int process_input(ShellState *p){
     }
     /* No single-line dispositions remain; accumulate line(s). */
     nLine = strlen(zLine);
-    if( nSql+nLine+8>=nAlloc ){
+    if( nSql+nLine+2>=nAlloc ){
       /* Grow buffer by half-again increments when big. */
-      nAlloc = nSql+(nSql>>1)+nLine+104;
+      nAlloc = nSql+(nSql>>1)+nLine+100;
       zSql = realloc(zSql, nAlloc);
       shell_check_oom(zSql);
     }
