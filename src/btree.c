@@ -1772,13 +1772,14 @@ static int allocateSpace(MemPage *pPage, int nByte, int *pIdx){
   ** integer, so a value of 0 is used in its place. */
   pTmp = &data[hdr+5];
   top = get2byte(pTmp);
-  assert( top<=(int)pPage->pBt->usableSize ); /* by btreeComputeFreeSpace() */
   if( gap>top ){
     if( top==0 && pPage->pBt->usableSize==65536 ){
       top = 65536;
     }else{
       return SQLITE_CORRUPT_PAGE(pPage);
     }
+  }else if( top>(int)pPage->pBt->usableSize ){
+    return SQLITE_CORRUPT_PAGE(pPage);
   }
 
   /* If there is enough space between gap and top for one more cell pointer,
@@ -7351,7 +7352,7 @@ static int rebuildPage(
 
   assert( i<iEnd );
   j = get2byte(&aData[hdr+5]);
-  if( j>(u32)usableSize ){ j = 0; }
+  if( NEVER(j>(u32)usableSize) ){ j = 0; }
   memcpy(&pTmp[j], &aData[j], usableSize - j);
 
   for(k=0; pCArray->ixNx[k]<=i && ALWAYS(k<NB*2); k++){}
@@ -7585,7 +7586,7 @@ static int editPage(
 
   pData = &aData[get2byteNotZero(&aData[hdr+5])];
   if( pData<pBegin ) goto editpage_fail;
-  if( pData>pPg->aDataEnd ) goto editpage_fail;
+  if( NEVER(pData>pPg->aDataEnd) ) goto editpage_fail;
 
   /* Add cells to the start of the page */
   if( iNew<iOld ){
@@ -9533,6 +9534,9 @@ int sqlite3BtreeDelete(BtCursor *pCur, u8 flags){
   }
   pCell = findCell(pPage, iCellIdx);
   if( pPage->nFree<0 && btreeComputeFreeSpace(pPage) ){
+    return SQLITE_CORRUPT_BKPT;
+  }
+  if( pCell<&pPage->aCellIdx[pPage->nCell] ){
     return SQLITE_CORRUPT_BKPT;
   }
 

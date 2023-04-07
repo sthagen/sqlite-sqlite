@@ -1487,6 +1487,9 @@ static int vtabBestIndex(Parse *pParse, Table *pTab, sqlite3_index_info *p){
       sqlite3ErrorMsg(pParse, "%s", pVtab->zErrMsg);
     }
   }
+  if( pTab->u.vtab.p->bAllSchemas ){
+    sqlite3VtabUsesAllSchemas(pParse);
+  }
   sqlite3_free(pVtab->zErrMsg);
   pVtab->zErrMsg = 0;
   return rc;
@@ -4118,8 +4121,6 @@ int sqlite3_vtab_distinct(sqlite3_index_info *pIdxInfo){
   return pHidden->eDistinct;
 }
 
-#if (defined(SQLITE_ENABLE_DBPAGE_VTAB) || defined(SQLITE_TEST)) \
-    && !defined(SQLITE_OMIT_VIRTUALTABLE)
 /*
 ** Cause the prepared statement that is associated with a call to
 ** xBestIndex to potentially use all schemas.  If the statement being
@@ -4129,9 +4130,7 @@ int sqlite3_vtab_distinct(sqlite3_index_info *pIdxInfo){
 **
 ** This is used by the (built-in) sqlite_dbpage virtual table.
 */
-void sqlite3VtabUsesAllSchemas(sqlite3_index_info *pIdxInfo){
-  HiddenIndexInfo *pHidden = (HiddenIndexInfo*)&pIdxInfo[1];
-  Parse *pParse = pHidden->pParse;
+void sqlite3VtabUsesAllSchemas(Parse *pParse){
   int nDb = pParse->db->nDb;
   int i;
   for(i=0; i<nDb; i++){
@@ -4143,7 +4142,6 @@ void sqlite3VtabUsesAllSchemas(sqlite3_index_info *pIdxInfo){
     }
   }
 }
-#endif
 
 /*
 ** Add all WhereLoop objects for a table of the join identified by
@@ -6700,7 +6698,8 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
       k = pLevel->addrBody + 1;
 #ifdef SQLITE_DEBUG
       if( db->flags & SQLITE_VdbeAddopTrace ){
-        printf("TRANSLATE opcodes in range %d..%d\n", k, last-1);
+        printf("TRANSLATE cursor %d->%d in opcode range %d..%d\n",
+                pLevel->iTabCur, pLevel->iIdxCur, k, last-1);
       }
       /* Proof that the "+1" on the k value above is safe */
       pOp = sqlite3VdbeGetOp(v, k - 1);

@@ -1183,10 +1183,8 @@ INCLUDE ../ext/expert/sqlite3expert.c
 #endif
 #if SQLITE_SHELL_HAVE_RECOVER
 INCLUDE ../ext/recover/sqlite3recover.h
-# ifndef SQLITE_HAVE_SQLITE3R
 INCLUDE ../ext/recover/dbdata.c
 INCLUDE ../ext/recover/sqlite3recover.c
-# endif
 #endif
 #ifdef SQLITE_SHELL_EXTSRC
 # include SHELL_STRINGIFY(SQLITE_SHELL_EXTSRC)
@@ -2788,7 +2786,7 @@ static char *shell_error_context(const char *zSql, sqlite3 *db){
   len = strlen(zSql);
   if( len>78 ){
     len = 78;
-    while( (zSql[len]&0xc0)==0x80 ) len--;
+    while( len>0 && (zSql[len]&0xc0)==0x80 ) len--;
   }
   zCode = sqlite3_mprintf("%.*s", len, zSql);
   shell_check_oom(zCode);
@@ -5203,6 +5201,9 @@ static void open_db(ShellState *p, int openFlags){
     sqlite3_regexp_init(p->db, 0, 0);
     sqlite3_ieee_init(p->db, 0, 0);
     sqlite3_series_init(p->db, 0, 0);
+#if SQLITE_SHELL_HAVE_RECOVER
+    sqlite3_dbdata_init(p->db, 0, 0);
+#endif
 #ifndef SQLITE_SHELL_FIDDLE
     sqlite3_fileio_init(p->db, 0, 0);
     sqlite3_completion_init(p->db, 0, 0);
@@ -6018,7 +6019,7 @@ static int db_int(sqlite3 *db, const char *zSql){
   return res;
 }
 
-#if defined(SQLITE_SHELL_HAVE_RECOVER)
+#if SQLITE_SHELL_HAVE_RECOVER
 /*
 ** Convert a 2-byte or 4-byte big-endian integer into a native integer
 */
@@ -9648,6 +9649,7 @@ static int do_meta_command(char *zLine, ShellState *p){
       }else{
         p->scanstatsOn = (u8)booleanValue(azArg[1]);
       }
+      open_db(p, 0);
       sqlite3_db_config(
           p->db, SQLITE_DBCONFIG_STMT_SCANSTATUS, p->scanstatsOn, (int*)0
       );
