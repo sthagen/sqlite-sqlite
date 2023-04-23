@@ -820,6 +820,8 @@ static void resolveP2Values(Vdbe *p, int *pMaxFuncArgs){
   Op *pOp;
   Parse *pParse = p->pParse;
   int *aLabel = pParse->aLabel;
+
+  assert( pParse->db->mallocFailed==0 ); /* tag-20230419-1 */
   p->readOnly = 1;
   p->bIsReader = 0;
   pOp = &p->aOp[p->nOp-1];
@@ -879,6 +881,7 @@ static void resolveP2Values(Vdbe *p, int *pMaxFuncArgs){
             ** have non-negative values for P2. */
             assert( (sqlite3OpcodeProperty[pOp->opcode] & OPFLG_JUMP)!=0 );
             assert( ADDR(pOp->p2)<-pParse->nLabel );
+            assert( aLabel!=0 );  /* True because of tag-20230419-1 */
             pOp->p2 = aLabel[ADDR(pOp->p2)];
           }
           break;
@@ -1622,7 +1625,7 @@ VdbeOp *sqlite3VdbeGetOp(Vdbe *p, int addr){
 
 /* Return the most recently added opcode
 */
-VdbeOp * sqlite3VdbeGetLastOp(Vdbe *p){
+VdbeOp *sqlite3VdbeGetLastOp(Vdbe *p){
   return sqlite3VdbeGetOp(p, p->nOp - 1);
 }
 
@@ -5351,6 +5354,16 @@ void sqlite3VdbePreUpdateHook(
   PreUpdate preupdate;
   const char *zTbl = pTab->zName;
   static const u8 fakeSortOrder = 0;
+#ifdef SQLITE_DEBUG
+  int nRealCol;
+  if( pTab->tabFlags & TF_WithoutRowid ){
+    nRealCol = sqlite3PrimaryKeyIndex(pTab)->nColumn;
+  }else if( pTab->tabFlags & TF_HasVirtual ){
+    nRealCol = pTab->nNVCol;
+  }else{
+    nRealCol = pTab->nCol;
+  }
+#endif
 
   assert( db->pPreUpdate==0 );
   memset(&preupdate, 0, sizeof(PreUpdate));
@@ -5367,8 +5380,8 @@ void sqlite3VdbePreUpdateHook(
 
   assert( pCsr!=0 );
   assert( pCsr->eCurType==CURTYPE_BTREE );
-  assert( pCsr->nField==pTab->nCol 
-       || (pCsr->nField==pTab->nCol+1 && op==SQLITE_DELETE && iReg==-1)
+  assert( pCsr->nField==nRealCol 
+       || (pCsr->nField==nRealCol+1 && op==SQLITE_DELETE && iReg==-1)
   );
 
   preupdate.v = v;
