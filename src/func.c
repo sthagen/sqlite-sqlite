@@ -1670,11 +1670,11 @@ static void loadExt(sqlite3_context *context, int argc, sqlite3_value **argv){
 */
 typedef struct SumCtx SumCtx;
 struct SumCtx {
-  double rSum;      /* Floating point sum */
-  i64 iSum;         /* Integer sum */  
+  double rSum;      /* Running sum as as a double */
+  i64 iSum;         /* Running sum as a signed integer */
   i64 cnt;          /* Number of elements summed */
-  u8 overflow;      /* True if integer overflow seen */
-  u8 approx;        /* True if non-integer value was input to the sum */
+  u8 approx;        /* True if any non-integer value was input to the sum */
+  u8 ovrfl;         /* Integer overflow seen */
 };
 
 /*
@@ -1696,15 +1696,26 @@ static void sumStep(sqlite3_context *context, int argc, sqlite3_value **argv){
   type = sqlite3_value_numeric_type(argv[0]);
   if( p && type!=SQLITE_NULL ){
     p->cnt++;
-    if( type==SQLITE_INTEGER ){
-      i64 v = sqlite3_value_int64(argv[0]);
-      p->rSum += v;
-      if( (p->approx|p->overflow)==0 && sqlite3AddInt64(&p->iSum, v) ){
-        p->approx = p->overflow = 1;
+    if( p->approx==0 ){
+      if( type!=SQLITE_INTEGER ){
+        p->rSum = (double)p->iSum;
+        p->approx = 1;
+        p->rSum += sqlite3_value_double(argv[0]);
+      }else{
+        i64 x = p->iSum;
+        if( sqlite3AddInt64(&x, sqlite3_value_int64(argv[0]))==0 ){
+          p->iSum = x;
+        }else{
+          p->ovrfl = 1;
+          p->rSum = (double)p->iSum;
+          p->approx = 1;
+          p->rSum += sqlite3_value_double(argv[0]);
+        }
       }
     }else{
-      p->rSum += sqlite3_value_double(argv[0]);
+      if( type!=SQLITE_INTEGER ) p->ovrfl = 0;
       p->approx = 1;
+      p->rSum += sqlite3_value_double(argv[0]);
     }
   }
 }
@@ -1721,13 +1732,10 @@ static void sumInverse(sqlite3_context *context, int argc, sqlite3_value**argv){
   if( ALWAYS(p) && type!=SQLITE_NULL ){
     assert( p->cnt>0 );
     p->cnt--;
-    assert( type==SQLITE_INTEGER || p->approx );
-    if( type==SQLITE_INTEGER && p->approx==0 ){
-      i64 v = sqlite3_value_int64(argv[0]);
-      p->rSum -= v;
-      p->iSum -= v;
-    }else{
+    if( p->approx ){
       p->rSum -= sqlite3_value_double(argv[0]);
+    }else{
+      p->iSum -= sqlite3_value_int64(argv[0]);
     }
   }
 }
@@ -1738,10 +1746,12 @@ static void sumFinalize(sqlite3_context *context){
   SumCtx *p;
   p = sqlite3_aggregate_context(context, 0);
   if( p && p->cnt>0 ){
-    if( p->overflow ){
-      sqlite3_result_error(context,"integer overflow",-1);
-    }else if( p->approx ){
-      sqlite3_result_double(context, p->rSum);
+    if( p->approx ){
+      if( p->ovrfl ){
+        sqlite3_result_error(context,"integer overflow",-1);
+      }else{
+        sqlite3_result_double(context, p->rSum);
+      }
     }else{
       sqlite3_result_int64(context, p->iSum);
     }
@@ -1751,14 +1761,27 @@ static void avgFinalize(sqlite3_context *context){
   SumCtx *p;
   p = sqlite3_aggregate_context(context, 0);
   if( p && p->cnt>0 ){
-    sqlite3_result_double(context, p->rSum/(double)p->cnt);
+    double r;
+    if( p->approx ){
+      r = p->rSum;
+    }else{
+      r = sqlite3RealToI64(p->iSum);
+    }
+    sqlite3_result_double(context, r/(double)p->cnt);
   }
 }
 static void totalFinalize(sqlite3_context *context){
   SumCtx *p;
+  double r = 0.0;
   p = sqlite3_aggregate_context(context, 0);
-  /* (double)0 In case of SQLITE_OMIT_FLOATING_POINT... */
-  sqlite3_result_double(context, p ? p->rSum : (double)0);
+  if( p ){
+    if( p->approx ){
+      r = p->rSum;
+    }else{
+      r = sqlite3RealToI64(p->iSum);
+    }
+  }
+  sqlite3_result_double(context, r);
 }
 
 /*
