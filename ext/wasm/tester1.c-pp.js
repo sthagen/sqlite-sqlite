@@ -353,7 +353,7 @@ globalThis.sqlite3InitModule = sqlite3InitModule;
   const sahPoolConfig = {
     name: 'opfs-sahpool-tester1',
     clearOnInit: true,
-    initialCapacity: 3
+    initialCapacity: 6
   };
   ////////////////////////////////////////////////////////////////////////
   // End of infrastructure setup. Now define the tests...
@@ -3072,10 +3072,41 @@ globalThis.sqlite3InitModule = sqlite3InitModule;
         db = new u2.OpfsSAHPoolDb(dbName);
         T.assert(1 === u1.getFileCount());
         db.close();
-        T.assert(1 === u1.getFileCount())
-          .assert(true === u1.unlink(dbName))
+        const fileNames = u1.getFileNames();
+        T.assert(1 === fileNames.length)
+          .assert(dbName === fileNames[0])
+          .assert(1 === u1.getFileCount())
+
+        if(1){ // test exportFile() and importDb()
+          const dbytes = u1.exportFile(dbName);
+          T.assert(dbytes.length >= 4096);
+          const dbName2 = '/exported.db';
+          u1.importDb(dbName2, dbytes);
+          T.assert( 2 == u1.getFileCount() );
+          let db2 = new u1.OpfsSAHPoolDb(dbName2);
+          T.assert(db2 instanceof sqlite3.oo1.DB)
+            .assert(3 === db2.selectValue('select count(*) from t'));
+          db2.close();
+          T.assert(true === u1.unlink(dbName2))
+            .assert(false === u1.unlink(dbName2))
+            .assert(1 === u1.getFileCount())
+            .assert(1 === u1.getFileNames().length);
+        }
+
+        T.assert(true === u1.unlink(dbName))
           .assert(false === u1.unlink(dbName))
-          .assert(0 === u1.getFileCount());
+          .assert(0 === u1.getFileCount())
+          .assert(0 === u1.getFileNames().length);
+
+        // Demonstrate that two SAH pools can coexist so long as
+        // they have different names.
+        const conf2 = JSON.parse(JSON.stringify(sahPoolConfig));
+        conf2.name += '-test2';
+        const POther = await inst(conf2);
+        log("Installed second SAH instance as",conf2.name);
+        T.assert(0 === POther.getFileCount())
+          .assert(true === await POther.removeVfs());
+
         if(0){
            /* Enable this block to inspect vfs's contents via the dev
               console or OPFS Explorer browser extension.  The
@@ -3087,7 +3118,6 @@ globalThis.sqlite3InitModule = sqlite3InitModule;
           .assert(!sqlite3.capi.sqlite3_vfs_find(sahPoolConfig.name));
 
         let cErr, u3;
-        const conf2 = JSON.parse(JSON.stringify(sahPoolConfig));
         conf2.$testThrowInInit = new Error("Testing throwing during init.");
         conf2.name = sahPoolConfig.name+'-err';
         const P3 = await inst(conf2).then(u=>u3 = u).catch((e)=>cErr=e);

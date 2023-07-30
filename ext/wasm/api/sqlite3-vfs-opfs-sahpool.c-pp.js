@@ -501,6 +501,15 @@ globalThis.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     /* Current number of in-use files from pool. */
     getFileCount(){return this.#mapFilenameToSAH.size}
 
+    /* Returns an array of the names of all
+       currently-opened client-specified filenames. */
+    getFileNames(){
+      const rc = [];
+      const iter = this.#mapFilenameToSAH.keys();
+      for(const n of iter) rc.push(n);
+      return rc;
+    }
+
 //    #createFileObject(sah,clientName,opaqueName){
 //      const f = Object.assign(Object.create(null),{
 //        clientName, opaqueName
@@ -654,10 +663,10 @@ globalThis.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     */
     setAssociatedPath(sah, path, flags){
       const enc = textEncoder.encodeInto(path, this.#apBody);
-      if(HEADER_MAX_PATH_SIZE <= enc.written){
+      if(HEADER_MAX_PATH_SIZE <= enc.written + 1/*NUL byte*/){
         toss("Path too long:",path);
       }
-
+      this.#apBody.fill(0, enc.written, HEADER_MAX_PATH_SIZE);
       this.#dvBody.setUint32(HEADER_OFFSET_FLAGS, flags);
 
       const digest = this.computeDigest(this.#apBody);
@@ -856,6 +865,7 @@ globalThis.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
 
     //! Documented elsewhere in this file.
     importDb(name, bytes){
+      if(bytes instanceof ArrayBuffer) bytes = new Uint8Array(bytes);
       const n = bytes.byteLength;
       if(n<512 || n%512!=0){
         toss("Byte array size is invalid for an SQLite db.");
@@ -901,6 +911,7 @@ globalThis.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     getCapacity(){ return this.#p.getCapacity(this.#p) }
 
     getFileCount(){ return this.#p.getFileCount() }
+    getFileNames(){ return this.#p.getFileNames() }
 
     async reserveMinimumCapacity(min){
       const c = this.#p.getCapacity();
@@ -1059,16 +1070,22 @@ globalThis.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
      Returns the number of files from the pool currently allocated to
      slots. This is not the same as the files being "opened".
 
-     - void importDb(name, byteArray)
+     - array getFileNames()
+
+     Returns an array of the names of the files currently allocated to
+     slots. This list is the same length as getFileCount().
+
+     - void importDb(name, bytes)
 
      Imports the contents of an SQLite database, provided as a byte
-     array, under the given name, overwriting any existing
-     content. Throws if the pool has no available file slots, on I/O
-     error, or if the input does not appear to be a database. In the
-     latter case, only a cursory examination is made.  Note that this
-     routine is _only_ for importing database files, not arbitrary files,
-     the reason being that this VFS will automatically clean up any
-     non-database files so importing them is pointless.
+     array or ArrayBuffer, under the given name, overwriting any
+     existing content. Throws if the pool has no available file slots,
+     on I/O error, or if the input does not appear to be a
+     database. In the latter case, only a cursory examination is made.
+     Note that this routine is _only_ for importing database files,
+     not arbitrary files, the reason being that this VFS will
+     automatically clean up any non-database files so importing them
+     is pointless.
 
      - [async] number reduceCapacity(n)
 
