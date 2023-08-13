@@ -1,12 +1,48 @@
 
 set dir [pwd]
-set testdir [file dirname $argv0]
+set testdir [file normalize [file dirname $argv0]]
 set saved $argv
 set argv [list]
 source [file join $testdir testrunner_data.tcl]
 source [file join $testdir permutations.test]
 set argv $saved
 cd $dir
+
+# This script requires an interpreter that supports [package require sqlite3]
+# to run. If this is not such an intepreter, see if there is a [testfixture]
+# in the current directory. If so, run the command using it. If not, 
+# recommend that the user build one.
+#
+proc find_interpreter {} {
+  set interpreter [file tail [info nameofexec]]
+  set rc [catch { package require sqlite3 }]
+  if {$rc} {
+    if { [string match -nocase testfixture* $interpreter]==0
+      && [file executable ./testfixture]
+    } {
+      puts "Failed to find tcl package sqlite3. Restarting with ./testfixture.."
+      set status [catch { 
+          exec ./testfixture [info script] {*}$::argv >@ stdout 
+      } msg]
+      exit $status
+    }
+  }
+  if {$rc} {
+    puts stderr "Failed to find tcl package sqlite3"
+    puts stderr "Run \"make testfixture\" and then try again..."
+    exit 1
+  }
+}
+find_interpreter
+
+# Usually this script is run by [testfixture]. But it can also be run
+# by a regular [tclsh]. For these cases, emulate the [clock_milliseconds] 
+# command.
+if {[info commands clock_milliseconds]==""} {
+  proc clock_milliseconds {} {
+    clock milliseconds
+  }
+}
 
 #-------------------------------------------------------------------------
 # Usage:
@@ -152,7 +188,7 @@ set TRG(schema) {
     state TEXT CHECK( state IN ('', 'ready', 'running', 'done', 'failed') ),
     time INTEGER,                 -- Time in ms
     output TEXT,                  -- full output of test script
-    priority AS ((config='make') + ((config='build')*2) + (slow*4)),
+    priority AS (((config='make')*3) + (config='build') + (slow*2)),
     jobtype AS (
       CASE WHEN config IN ('build', 'make') THEN config ELSE 'script' END
     ),
@@ -181,10 +217,11 @@ if {[llength $argv]==2
   set script [file normalize [lindex $argv 1]]
   set ::argv [list]
 
+  set testdir [file dirname $argv0]
+  source $::testdir/tester.tcl
+
   if {$permutation=="full"} {
 
-    set testdir [file dirname $argv0]
-    source $::testdir/tester.tcl
     unset -nocomplain ::G(isquick)
     reset_db
 
@@ -289,9 +326,13 @@ if {[llength $argv]==1
 
   set cmdline [mydb one { SELECT value FROM config WHERE name='cmdline' }]
   set nJob [mydb one { SELECT value FROM config WHERE name='njob' }]
-  set tm [expr [clock_milliseconds] - [mydb one {
-    SELECT value FROM config WHERE name='start'
-  }]]
+
+  set now [clock_milliseconds]
+  set tm [mydb one {
+    SELECT 
+      COALESCE((SELECT value FROM config WHERE name='end'), $now) -
+      (SELECT value FROM config WHERE name='start')
+  }]
 
   set total 0
   foreach s {"" ready running done failed} { set S($s) 0 }
@@ -315,7 +356,6 @@ if {[llength $argv]==1
   set srcdir [file dirname [file dirname $TRG(info_script)]]
   if {$S(running)>0} {
     puts "Running: "
-    set now [clock_milliseconds]
     mydb eval {
       SELECT build, config, filename, time FROM script WHERE state='running'
       ORDER BY time 
@@ -411,8 +451,6 @@ proc dirs_allocDir {} {
   return $iRet
 }
 
-set testdir [file dirname $argv0]
-
 # Check that directory $dir exists. If it does not, create it. If 
 # it does, delete its contents.
 #
@@ -449,7 +487,16 @@ proc testset_patternlist {patternlist} {
 
   set first [lindex $patternlist 0]
 
-  if {$first=="release"} {
+  if {$first=="mdevtest"} {
+    set patternlist [lrange $patternlist 1 end]
+
+    foreach b {All-Debug All-O0} {
+      lappend testset [list $b build testfixture]
+      lappend testset [list $b make fuzztest]
+      testset_append testset $b veryquick $patternlist
+    }
+
+  } elseif {$first=="release"} {
     set platform $::TRG(platform)
 
     set patternlist [lrange $patternlist 1 end]
@@ -865,6 +912,8 @@ proc run_testset {} {
   one_line_report
 
   r_write_db {
+    set tm [clock_milliseconds]
+    trdb eval { REPLACE INTO config VALUES('end', $tm ); }
     set nErr [trdb one {SELECT count(*) FROM script WHERE state='failed'}]
     if {$nErr>0} {
       puts "$nErr failures:"
