@@ -6,9 +6,10 @@ JAVA_HOME ?= $(HOME)/jdk/current
 # e.g. /usr/lib/jvm/default-javajava-19-openjdk-amd64
 JDK_HOME ?= $(JAVA_HOME)
 # ^^^ JDK_HOME is not as widely used as JAVA_HOME
-bin.javac := $(JDK_HOME)/bin/javac
-bin.java  := $(JDK_HOME)/bin/java
-bin.jar   := $(JDK_HOME)/bin/jar
+bin.jar     := $(JDK_HOME)/bin/jar
+bin.java    := $(JDK_HOME)/bin/java
+bin.javac   := $(JDK_HOME)/bin/javac
+bin.javadoc := $(JDK_HOME)/bin/javadoc
 ifeq (,$(wildcard $(JDK_HOME)))
 $(error set JDK_HOME to the top-most dir of your JDK installation.)
 endif
@@ -17,18 +18,18 @@ $(MAKEFILE):
 
 package.jar := sqlite3-jni.jar
 
-dir.top := ../..
-dir.tool := ../../tool
-dir.jni := $(patsubst %/,%,$(dir $(MAKEFILE)))
-
+dir.top     := ../..
+dir.tool    := ../../tool
+dir.jni     := $(patsubst %/,%,$(dir $(MAKEFILE)))
 dir.src     := $(dir.jni)/src
 dir.src.c   := $(dir.src)/c
 dir.bld     := $(dir.jni)/bld
 dir.bld.c   := $(dir.bld)
 dir.src.jni := $(dir.src)/org/sqlite/jni
 dir.src.jni.tester := $(dir.src.jni)/tester
+mkdir       := mkdir -p
 $(dir.bld.c):
-	mkdir -p $@
+	$(mkdir) $@
 
 classpath := $(dir.src)
 CLEAN_FILES := $(package.jar)
@@ -58,25 +59,39 @@ $(bin.version-info): $(dir.tool)/version-info.c $(sqlite3.h) $(dir.top)/Makefile
 # Be explicit about which Java files to compile so that we can work on
 # in-progress files without requiring them to be in a compilable statae.
 JAVA_FILES.main := $(patsubst %,$(dir.src.jni)/%,\
-  BusyHandler.java \
-  Collation.java \
-  CollationNeeded.java \
-  CommitHook.java \
+  annotation/Canonical.java \
+  annotation/NotNull.java \
+  annotation/Nullable.java \
+  annotation/package-info.java \
+  AbstractCollationCallback.java \
+  AggregateFunction.java \
+  AuthorizerCallback.java \
+  AutoExtensionCallback.java \
+  BusyHandlerCallback.java \
+  CollationCallback.java \
+  CollationNeededCallback.java \
+  CommitHookCallback.java \
+  ConfigSqllogCallback.java \
   NativePointerHolder.java \
   OutputPointer.java \
-  ProgressHandler.java \
+  PreupdateHookCallback.java \
+  ProgressHandlerCallback.java \
   ResultCode.java \
-  RollbackHook.java \
+  RollbackHookCallback.java \
+  ScalarFunction.java \
   SQLFunction.java \
-  sqlite3_context.java \
-  sqlite3.java \
   SQLite3Jni.java \
+  Tester1.java \
+  TraceV2Callback.java \
+  UpdateHookCallback.java \
+  ValueHolder.java \
+  WindowFunction.java \
+  XDestroyCallback.java \
+  package-info.java \
+  sqlite3.java \
+  sqlite3_context.java \
   sqlite3_stmt.java \
   sqlite3_value.java \
-  Tester1.java \
-  Tracer.java \
-  UpdateHook.java \
-  ValueHolder.java \
 )
 ifeq (1,$(enable.fts5))
   JAVA_FILES.main += $(patsubst %,$(dir.src.jni)/%,\
@@ -152,6 +167,8 @@ $(sqlite3.h):
 	$(MAKE) -C $(dir.top) sqlite3.c
 $(sqlite3.c): $(sqlite3.h)
 
+opt.threadsafe ?= 1
+opt.oom ?= 0
 SQLITE_OPT = \
   -DSQLITE_ENABLE_RTREE \
   -DSQLITE_ENABLE_EXPLAIN_COMMENTS \
@@ -160,17 +177,17 @@ SQLITE_OPT = \
   -DSQLITE_ENABLE_DBSTAT_VTAB \
   -DSQLITE_ENABLE_BYTECODE_VTAB \
   -DSQLITE_ENABLE_OFFSET_SQL_FUNC \
+  -DSQLITE_ENABLE_PREUPDATE_HOOK \
+  -DSQLITE_ENABLE_SQLLOG \
   -DSQLITE_OMIT_LOAD_EXTENSION \
   -DSQLITE_OMIT_DEPRECATED \
   -DSQLITE_OMIT_SHARED_CACHE \
-  -DSQLITE_THREADSAFE=0 \
+  -DSQLITE_THREADSAFE=$(opt.threadsafe) \
   -DSQLITE_TEMP_STORE=2 \
   -DSQLITE_USE_URI=1 \
-  -DSQLITE_C=$(sqlite3.c)
-#  -DSQLITE_DEBUG
-# -DSQLITE_DEBUG is just to work around a -Wall warning
-# for a var which gets set in all builds but only read
-# via assert().
+  -DSQLITE_C=$(sqlite3.c) \
+  -DSQLITE_JNI_FATAL_OOM=$(opt.oom) \
+  -DSQLITE_DEBUG
 
 SQLITE_OPT += -g -DDEBUG -UNDEBUG
 
@@ -216,7 +233,7 @@ sqlite3-jni.dll.cflags = \
 # include path for client-level code.
 ########################################################################
 ifeq (1,$(enable.tester))
-  sqlite3-jni.dll.cflags += -DS3JNI_ENABLE_SQLTester
+  sqlite3-jni.dll.cflags += -DSQLITE_JNI_ENABLE_SQLTester
 endif
 $(sqlite3-jni.h): $(sqlite3-jni.h.in) $(MAKEFILE)
 	cat $(sqlite3-jni.h.in) > $@
@@ -226,12 +243,23 @@ $(sqlite3-jni.dll): $(dir.bld.c) $(sqlite3-jni.c) $(SQLite3Jni.java) $(MAKEFILE)
 			$(sqlite3-jni.c) -shared -o $@
 all: $(sqlite3-jni.dll)
 
-.PHONY: test
-test.flags ?= -v
-test: $(SQLite3Jni.class) $(sqlite3-jni.dll)
-	$(bin.java) -ea -Djava.library.path=$(dir.bld.c) \
-		$(java.flags) -cp $(classpath) \
-		org.sqlite.jni.Tester1 $(if $(test.flags),-- $(test.flags),)
+.PHONY: test test-one
+test.flags ?=
+test.main.flags = -ea -Djava.library.path=$(dir.bld.c) \
+                  $(java.flags) -cp $(classpath) \
+                  org.sqlite.jni.Tester1
+test.deps := $(SQLite3Jni.class) $(sqlite3-jni.dll)
+test-one: $(test.deps)
+	$(bin.java) $(test.main.flags) $(test.flags)
+test-sqllog: $(test.deps)
+	@echo "Testing with -sqllog..."
+	$(bin.java) $(test.main.flags) -sqllog
+test-mt: $(test.deps)
+	@echo "Testing in multi-threaded mode:";
+	$(bin.java) $(test.main.flags) -t 11 -r 50 -shuffle $(test.flags)
+
+test: test-one test-mt
+tests: test test-sqllog
 
 tester.scripts := $(sort $(wildcard $(dir.src)/tests/*.test))
 tester.flags ?= # --verbose
@@ -267,13 +295,26 @@ endif
 
 tester-ext: tester-local
 tester: tester-ext
-tests: test tester
+tests: tester
+
+########################################################################
+# Build each SQLITE_THREADMODE variant and run all tests against them.
+multitest: clean
+	$(MAKE) opt.threadsafe=0 opt.oom=1 tests clean
+	$(MAKE) opt.threadsafe=0 opt.oom=0 tests clean
+	$(MAKE) opt.threadsafe=1 opt.oom=1 tests clean
+	$(MAKE) opt.threadsafe=1 opt.oom=0 tests clean
+	$(MAKE) opt.threadsafe=2 opt.oom=1 tests clean
+	$(MAKE) opt.threadsafe=2 opt.oom=0 tests clean
+
+
+########################################################################
+# jar bundle...
 package.jar.in := $(abspath $(dir.src)/jar.in)
 CLEAN_FILES += $(package.jar.in)
 $(package.jar.in): $(MAKEFILE) $(CLASS_FILES.main)
 	cd $(dir.src); ls -1 org/sqlite/jni/*.java org/sqlite/jni/*.class > $@
-	@ls -la $@
-	@echo "To use this jar you will need the -Djava.library.path=DIR/WITH/libsqlite3-jni.so flag."
+	@echo "To use this jar you will need the -Djava.library.path=DIR/CONTAINING/libsqlite3-jni.so flag."
 	@echo "e.g. java -jar $@ -Djava.library.path=bld"
 
 $(package.jar): $(CLASS_FILES) $(MAKEFILE) $(package.jar.in)
@@ -282,6 +323,28 @@ $(package.jar): $(CLASS_FILES) $(MAKEFILE) $(package.jar.in)
 
 jar: $(package.jar)
 
+########################################################################
+# javadoc...
+dir.doc   := $(dir.jni)/javadoc
+doc.index := $(dir.doc)/index.html
+$(doc.index): $(JAVA_FILES.main) $(MAKEFILE)
+	@if [ -d $(dir.doc) ]; then rm -fr $(dir.doc)/*; fi
+	$(bin.javadoc) -cp $(classpath) -d $(dir.doc) -quiet \
+		-subpackages org.sqlite.jni -exclude org.sqlite.jni.tester
+	@echo "javadoc output is in $@"
+
+.PHONY: doc javadoc docserve
+.FORCE: doc
+doc: $(doc.index)
+javadoc: $(doc.index)
+# Force rebild of docs
+redoc:
+	@rm -f $(doc.index)
+	@$(MAKE) doc
+docserve: $(doc.index)
+	cd $(dir.doc) && althttpd -max-age 1 -page index.html
+########################################################################
+# Clean up...
 CLEAN_FILES += $(dir.bld.c)/* \
   $(dir.src.jni)/*.class \
   $(dir.src.jni.tester)/*.class \
@@ -293,7 +356,7 @@ clean:
 	-rm -f $(CLEAN_FILES)
 distclean: clean
 	-rm -f $(DISTCLEAN_FILES)
-	-rm -fr $(dir.bld.c)
+	-rm -fr $(dir.bld.c) $(dir.doc)
 
 ########################################################################
 # disttribution bundle rules...
@@ -317,6 +380,10 @@ dist: \
     $(bin.version-info) $(sqlite3.canonical.c) \
     $(package.jar) $(MAKEFILE)
 	@echo "Making end-user deliverables..."
+	@echo "****************************************************************************"; \
+	echo  "*** WARNING: be sure to build this with JDK8 (javac 1.8) for compatibility."; \
+	echo  "*** reasons!"; $$($(bin.javac) -version); \
+	echo  "****************************************************************************"
 	@rm -fr $(dist-dir.top)
 	@mkdir -p $(dist-dir.src)
 	@cp -p $(dist.top.extras) $(dist-dir.top)/.

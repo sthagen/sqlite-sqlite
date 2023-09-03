@@ -1,5 +1,5 @@
 /*
-** 2023-07-22
+** 2023-08-25
 **
 ** The author disclaims copyright to this source code.  In place of
 ** a legal notice, here is a blessing:
@@ -14,12 +14,12 @@
 package org.sqlite.jni;
 
 /**
-   Callback proxy for use with sqlite3_rollback_hook().
+   Callback for use with {@link SQLite3Jni#sqlite3_rollback_hook}.
 */
-public interface RollbackHook {
+public interface RollbackHookCallback extends SQLite3CallbackProxy {
   /**
-     Works as documented for the sqlite3_rollback_hook() callback.
-     Must not throw.
+     Works as documented for the C-level sqlite3_rollback_hook()
+     callback.
   */
-  void xRollbackHook();
+  void call();
 }

@@ -1291,11 +1291,17 @@ fulltestonly:	$(TESTPROGS) fuzztest
 	./testfixture$(TEXE) $(TOP)/test/full.test
 
 # Fuzz testing
-fuzztest:	fuzzcheck$(TEXE) $(FUZZDATA) sessionfuzz$(TEXE) $(TOP)/test/sessionfuzz-data1.db
+#
+# WARNING: When the "fuzztest" target is run by the testrunner.tcl script,
+# it does not actually run this code. Instead, it schedules equivalent 
+# commands. Therefore, if this target is updated, then code in
+# testrunner_data.tcl (search for "trd_fuzztest_data") must also be updated.
+#
+fuzztest:	fuzzcheck$(TEXE) $(FUZZDATA) sessionfuzz$(TEXE)
 	./fuzzcheck$(TEXE) $(FUZZDATA)
 	./sessionfuzz$(TEXE) run $(TOP)/test/sessionfuzz-data1.db
 
-valgrindfuzz:	fuzzcheck$(TEXT) $(FUZZDATA) sessionfuzz$(TEXE) $(TOP)/test/sessionfuzz-data1.db
+valgrindfuzz:	fuzzcheck$(TEXT) $(FUZZDATA) sessionfuzz$(TEXE)
 	valgrind ./fuzzcheck$(TEXE) --cell-size-check --limit-mem 10M $(FUZZDATA)
 	valgrind ./sessionfuzz$(TEXE) run $(TOP)/test/sessionfuzz-data1.db
 
@@ -1316,6 +1322,9 @@ devtest:	testfixture$(TEXE) fuzztest testrunner
 
 mdevtest:
 	$(TCLSH_CMD) $(TOP)/test/testrunner.tcl mdevtest
+
+sdevtest:
+	$(TCLSH_CMD) $(TOP)/test/testrunner.tcl sdevtest
 
 # Testing for a release
 #

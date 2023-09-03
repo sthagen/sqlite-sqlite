@@ -1,5 +1,5 @@
 /*
-** 2023-07-30
+** 2023-08-25
 **
 ** The author disclaims copyright to this source code.  In place of
 ** a legal notice, here is a blessing:
@@ -14,15 +14,12 @@
 package org.sqlite.jni;
 
 /**
-   Callback proxy for use with sqlite3_collation_needed().
+   Callback for use with {@link SQLite3Jni#sqlite3_update_hook}.
 */
-public interface CollationNeeded {
+public interface UpdateHookCallback extends SQLite3CallbackProxy {
   /**
-     Has the same semantics as the C-level sqlite3_create_collation()
+     Must function as described for the C-level sqlite3_update_hook()
      callback.
-
-     If it throws, the exception message is passed on to the db and
-     the exception is suppressed.
   */
-  int xCollationNeeded(sqlite3 db, int eTextRep, String collationName);
+  void call(int opId, String dbName, String tableName, long rowId);
 }

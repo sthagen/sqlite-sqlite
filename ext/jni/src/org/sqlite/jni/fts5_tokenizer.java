@@ -12,6 +12,7 @@
 ** This file is part of the JNI bindings for the sqlite3 C API.
 */
 package org.sqlite.jni;
+import org.sqlite.jni.annotation.*;
 
 /**
    INCOMPLETE AND COMPLETELY UNTESTED.
@@ -30,7 +31,7 @@ public final class fts5_tokenizer extends NativePointerHolder<fts5_tokenizer> {
 
   public native int xTokenize(@NotNull Fts5Tokenizer t, int tokFlags,
                               @NotNull byte pText[],
-                              @NotNull Fts5.xTokenizeCallback callback);
+                              @NotNull Fts5.xTokenize_callback callback);
 
 
   // int (*xTokenize)(Fts5Tokenizer*,

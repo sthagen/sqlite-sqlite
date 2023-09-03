@@ -16,13 +16,13 @@ package org.sqlite.jni;
 /**
    Helper classes for handling JNI output pointers.
 
-   We do not use a generic OutputPointer<T> because working with those
+   <p>We do not use a generic OutputPointer<T> because working with those
    from the native JNI code is unduly quirky due to a lack of
    autoboxing at that level.
 
-   The usage is similar for all of thes types:
+   <p>The usage is similar for all of thes types:
 
-   ```
+   <pre>{@code
    OutputPointer.sqlite3 out = new OutputPointer.sqlite3();
    assert( null==out.get() );
    int rc = sqlite3_open(":memory:", out);
@@ -30,12 +30,15 @@ package org.sqlite.jni;
    assert( null!=out.get() );
    sqlite3 db = out.take();
    assert( null==out.get() );
-   ```
+   }</pre>
 
-   With the minor exception that the primitive types permit direct
+   <p>With the minor exception that the primitive types permit direct
    access to the object's value via the `value` property, whereas the
    JNI-level opaque types do not permit client-level code to set that
    property.
+
+   <p>Warning: do not share instances of these classes across
+   threads. Doing so may lead to corrupting sqlite3-internal state.
 */
 public final class OutputPointer {
 
@@ -47,13 +50,13 @@ public final class OutputPointer {
   */
   public static final class sqlite3 {
     private org.sqlite.jni.sqlite3 value;
-    //! Initializes with a null value.
+    /** Initializes with a null value. */
     public sqlite3(){value = null;}
-    //! Sets the current value to null.
+    /** Sets the current value to null. */
     public void clear(){value = null;}
-    //! Returns the current value.
+    /** Returns the current value. */
     public final org.sqlite.jni.sqlite3 get(){return value;}
-    //! Equivalent to calling get() then clear().
+    /** Equivalent to calling get() then clear(). */
     public final org.sqlite.jni.sqlite3 take(){
       final org.sqlite.jni.sqlite3 v = value;
       value = null;
@@ -69,15 +72,37 @@ public final class OutputPointer {
   */
   public static final class sqlite3_stmt {
     private org.sqlite.jni.sqlite3_stmt value;
-    //! Initializes with a null value.
+    /** Initializes with a null value. */
     public sqlite3_stmt(){value = null;}
-    //! Sets the current value to null.
+    /** Sets the current value to null. */
     public void clear(){value = null;}
-    //! Returns the current value.
+    /** Returns the current value. */
     public final org.sqlite.jni.sqlite3_stmt get(){return value;}
-    //! Equivalent to calling get() then clear().
+    /** Equivalent to calling get() then clear(). */
     public final org.sqlite.jni.sqlite3_stmt take(){
       final org.sqlite.jni.sqlite3_stmt v = value;
+      value = null;
+      return v;
+    }
+  }
+
+  /**
+     Output pointer for use with routines, such as sqlite3_prepupdate_new(),
+     which return a sqlite3_value handle via an output pointer. These
+     pointers can only be set by the JNI layer, not by client-level
+     code.
+  */
+  public static final class sqlite3_value {
+    private org.sqlite.jni.sqlite3_value value;
+    /** Initializes with a null value. */
+    public sqlite3_value(){value = null;}
+    /** Sets the current value to null. */
+    public void clear(){value = null;}
+    /** Returns the current value. */
+    public final org.sqlite.jni.sqlite3_value get(){return value;}
+    /** Equivalent to calling get() then clear(). */
+    public final org.sqlite.jni.sqlite3_value take(){
+      final org.sqlite.jni.sqlite3_value v = value;
       value = null;
       return v;
     }
@@ -93,13 +118,13 @@ public final class OutputPointer {
        consistency with the higher-level types.
     */
     public int value;
-    //! Initializes with the value 0.
+    /** Initializes with the value 0. */
     public Int32(){this(0);}
-    //! Initializes with the value v.
+    /** Initializes with the value v. */
     public Int32(int v){value = v;}
-    //! Returns the current value.
+    /** Returns the current value. */
     public final int get(){return value;}
-    //! Sets the current value to v.
+    /** Sets the current value to v. */
     public final void set(int v){value = v;}
   }
 
@@ -113,13 +138,13 @@ public final class OutputPointer {
        consistency with the higher-level types.
     */
     public long value;
-    //! Initializes with the value 0.
+    /** Initializes with the value 0. */
     public Int64(){this(0);}
-    //! Initializes with the value v.
+    /** Initializes with the value v. */
     public Int64(long v){value = v;}
-    //! Returns the current value.
+    /** Returns the current value. */
     public final long get(){return value;}
-    //! Sets the current value.
+    /** Sets the current value. */
     public final void set(long v){value = v;}
   }
 
@@ -133,13 +158,13 @@ public final class OutputPointer {
        consistency with the higher-level types.
     */
     public java.lang.String value;
-    //! Initializes with a null value.
+    /** Initializes with a null value. */
     public String(){this(null);}
-    //! Initializes with the value v.
+    /** Initializes with the value v. */
     public String(java.lang.String v){value = v;}
-    //! Returns the current value.
+    /** Returns the current value. */
     public final java.lang.String get(){return value;}
-    //! Sets the current value.
+    /** Sets the current value. */
     public final void set(java.lang.String v){value = v;}
   }
 
@@ -153,13 +178,13 @@ public final class OutputPointer {
        consistency with the higher-level types.
     */
     public byte[] value;
-    //! Initializes with the value null.
+    /** Initializes with the value null. */
     public ByteArray(){this(null);}
-    //! Initializes with the value v.
+    /** Initializes with the value v. */
     public ByteArray(byte[] v){value = v;}
-    //! Returns the current value.
+    /** Returns the current value. */
     public final byte[] get(){return value;}
-    //! Sets the current value.
+    /** Sets the current value. */
     public final void set(byte[] v){value = v;}
   }
 }

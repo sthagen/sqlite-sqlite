@@ -1,5 +1,5 @@
 /*
-** 2023-07-22
+** 2023-08-25
 **
 ** The author disclaims copyright to this source code.  In place of
 ** a legal notice, here is a blessing:
@@ -12,14 +12,17 @@
 ** This file is part of the JNI bindings for the sqlite3 C API.
 */
 package org.sqlite.jni;
+import org.sqlite.jni.annotation.*;
 
 /**
-   Callback proxy for use with sqlite3_commit_hook().
+   Callback for use with {@link SQLite3Jni#sqlite3_set_authorizer}.
 */
-public interface CommitHook {
+public interface AuthorizerCallback extends SQLite3CallbackProxy {
   /**
-     Works as documented for the sqlite3_commit_hook() callback.
-     Must not throw.
+     Must function as described for the C-level
+     sqlite3_set_authorizer() callback.
   */
-  int xCommitHook();
+  int call(int opId, @Nullable String s1, @Nullable String s2,
+           @Nullable String s3, @Nullable String s4);
+
 }
