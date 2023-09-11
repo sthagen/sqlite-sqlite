@@ -475,15 +475,20 @@ struct RtreeMatchArg {
 ** -DSQLITE_RUNTIME_BYTEORDER=1 is set, then byte-order is determined
 ** at run-time.
 */
-#ifndef SQLITE_BYTEORDER
-# if defined(i386)      || defined(__i386__)      || defined(_M_IX86) ||    \
+#ifndef SQLITE_BYTEORDER /* Replicate changes at tag-20230904a */
+# if defined(__BYTE_ORDER__) && __BYTE_ORDER__==__ORDER_BIG_ENDIAN__
+#   define SQLITE_BYTEORDER 4321
+# elif defined(__BYTE_ORDER__) && __BYTE_ORDER__==__ORDER_LITTLE_ENDIAN__
+#   define SQLITE_BYTEORDER 1234
+# elif defined(__BIG_ENDIAN__) && __BIG_ENDIAN__==1
+#   define SQLITE_BYTEORDER 4321
+# elif defined(i386)    || defined(__i386__)      || defined(_M_IX86) ||    \
      defined(__x86_64)  || defined(__x86_64__)    || defined(_M_X64)  ||    \
      defined(_M_AMD64)  || defined(_M_ARM)        || defined(__x86)   ||    \
      defined(__ARMEL__) || defined(__AARCH64EL__) || defined(_M_ARM64)
-#   define SQLITE_BYTEORDER    1234
-# elif defined(sparc)     || defined(__ppc__) || \
-       defined(__ARMEB__) || defined(__AARCH64EB__)
-#   define SQLITE_BYTEORDER    4321
+#   define SQLITE_BYTEORDER 1234
+# elif defined(sparc)   || defined(__ARMEB__)     || defined(__AARCH64EB__)
+#   define SQLITE_BYTEORDER 4321
 # else
 #   define SQLITE_BYTEORDER 0
 # endif
@@ -3497,8 +3502,11 @@ static int rtreeShadowName(const char *zName){
   return 0;
 }
 
+/* Forward declaration */
+static int rtreeIntegrity(sqlite3_vtab*, char**);
+
 static sqlite3_module rtreeModule = {
-  3,                          /* iVersion */
+  4,                          /* iVersion */
   rtreeCreate,                /* xCreate - create a table */
   rtreeConnect,               /* xConnect - connect to an existing table */
   rtreeBestIndex,             /* xBestIndex - Determine search strategy */
@@ -3521,7 +3529,8 @@ static sqlite3_module rtreeModule = {
   rtreeSavepoint,             /* xSavepoint */
   0,                          /* xRelease */
   0,                          /* xRollbackTo */
-  rtreeShadowName             /* xShadowName */
+  rtreeShadowName,            /* xShadowName */
+  rtreeIntegrity              /* xIntegrity */
 };
 
 static int rtreeSqlInit(
@@ -4353,6 +4362,20 @@ static int rtreeCheckTable(
   }
   *pzReport = check.zReport;
   return check.rc;
+}
+
+/*
+** Implementation of the xIntegrity method for Rtree.
+*/
+static int rtreeIntegrity(sqlite3_vtab *pVtab, char **pzErr){
+  Rtree *pRtree = (Rtree*)pVtab;
+  int rc;
+  rc = rtreeCheckTable(pRtree->db, pRtree->zDb, pRtree->zName, pzErr);
+  if( rc==SQLITE_OK && *pzErr ){
+    *pzErr = sqlite3_mprintf("In RTree %s.%s:\n%z",
+                 pRtree->zDb, pRtree->zName, *pzErr);
+  }
+  return rc;
 }
 
 /*
