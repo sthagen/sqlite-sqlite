@@ -11,13 +11,12 @@
 *************************************************************************
 ** This file is part of the JNI bindings for the sqlite3 C API.
 */
-package org.sqlite.jni;
+package org.sqlite.jni.fts5;
+
 
 /**
-   A wrapper for communicating C-level (Fts5Context*) instances with
-   Java. These wrappers do not own their associated pointer, they
-   simply provide a type-safe way to communicate it between Java and C
-   via JNI.
+   Callback type for use with xTokenize() variants.
 */
-public final class Fts5Context extends NativePointerHolder<Fts5Context> {
+public interface XTokenizeCallback {
+  int call(int tFlags, byte[] txt, int iStart, int iEnd);
 }
