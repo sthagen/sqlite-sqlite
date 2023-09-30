@@ -146,7 +146,7 @@ public class Tester1 implements Runnable {
     sqlite3 db = out.take();
     if( 0!=rc ){
       final String msg =
-        null==db ? sqlite3_errstr(rc) : sqlite3_errmsg16(db);
+        null==db ? sqlite3_errstr(rc) : sqlite3_errmsg(db);
       sqlite3_close(db);
       throw new RuntimeException("Opening db failed: "+msg);
     }
@@ -197,7 +197,7 @@ public class Tester1 implements Runnable {
     if(SQLITE_ROW==rc || SQLITE_DONE==rc) rc = 0;
     if( 0!=rc && throwOnError){
       throw new RuntimeException("db op failed with rc="
-                                 +rc+": "+sqlite3_errmsg16(db));
+                                 +rc+": "+sqlite3_errmsg(db));
     }
     return rc;
   }
@@ -289,9 +289,6 @@ public class Tester1 implements Runnable {
     affirm( !sqlite3_stmt_readonly(stmt) );
     affirm( db == sqlite3_db_handle(stmt) );
     rc = sqlite3_step(stmt);
-    if( SQLITE_DONE != rc ){
-      outln("step failed ??? ",rc, " ",sqlite3_errmsg16(db));
-    }
     affirm(SQLITE_DONE == rc);
     sqlite3_finalize(stmt);
     affirm( null == sqlite3_db_handle(stmt) );
@@ -346,7 +343,7 @@ public class Tester1 implements Runnable {
     stmt = sqlite3_prepare(db, "intentional error");
     affirm( null==stmt );
     affirm( 0!=sqlite3_errcode(db) );
-    affirm( 0==sqlite3_errmsg16(db).indexOf("near \"intentional\"") );
+    affirm( 0==sqlite3_errmsg(db).indexOf("near \"intentional\"") );
     sqlite3_finalize(stmt);
     stmt = sqlite3_prepare(db, "/* empty input*/\n-- comments only");
     affirm( null==stmt );
@@ -389,14 +386,17 @@ public class Tester1 implements Runnable {
     affirm(sqlite3_total_changes64(db) > changesT64);
     stmt = prepare(db, "SELECT a FROM t ORDER BY a DESC;");
     affirm( sqlite3_stmt_readonly(stmt) );
+    affirm( !sqlite3_stmt_busy(stmt) );
     int total2 = 0;
     while( SQLITE_ROW == sqlite3_step(stmt) ){
+      affirm( sqlite3_stmt_busy(stmt) );
       total2 += sqlite3_column_int(stmt, 0);
       sqlite3_value sv = sqlite3_column_value(stmt, 0);
       affirm( null != sv );
       affirm( 0 != sv.getNativePointer() );
       affirm( SQLITE_INTEGER == sqlite3_value_type(sv) );
     }
+    affirm( !sqlite3_stmt_busy(stmt) );
     sqlite3_finalize(stmt);
     affirm(total1 == total2);
     sqlite3_close_v2(db);
@@ -736,7 +736,7 @@ public class Tester1 implements Runnable {
     rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
     affirm( 0 != rc );
-    affirm( sqlite3_errmsg16(db).indexOf("an xFinal") > 0 );
+    affirm( sqlite3_errmsg(db).indexOf("an xFinal") > 0 );
 
     SQLFunction funcSc = new ScalarFunction(){
         @Override public void xFunc(sqlite3_context cx, sqlite3_value[] args){
@@ -750,7 +750,7 @@ public class Tester1 implements Runnable {
     rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
     affirm( 0 != rc );
-    affirm( sqlite3_errmsg16(db).indexOf("an xFunc") > 0 );
+    affirm( sqlite3_errmsg(db).indexOf("an xFunc") > 0 );
     rc = sqlite3_create_function(db, "mysca", 1, -1, funcSc);
     affirm( SQLITE_FORMAT==rc, "invalid encoding value." );
     sqlite3_close_v2(db);
@@ -1032,7 +1032,7 @@ public class Tester1 implements Runnable {
     execSql(db1, "BEGIN EXCLUSIVE");
     rc = sqlite3_prepare_v2(db2, "SELECT * from t", outStmt);
     affirm( SQLITE_BUSY == rc);
-    assert( null == outStmt.get() );
+    affirm( null == outStmt.get() );
     affirm( 3 == xBusyCalled.value );
     sqlite3_close_v2(db1);
     sqlite3_close_v2(db2);
@@ -1283,7 +1283,7 @@ public class Tester1 implements Runnable {
     }
     Exception err = null;
     try {
-      Class t = Class.forName("org.sqlite.jni.fts5.TesterFts5");
+      Class t = Class.forName("org.sqlite.jni.TesterFts5");
       java.lang.reflect.Constructor ctor = t.getConstructor();
       ctor.setAccessible(true);
       final long timeStart = System.currentTimeMillis();
@@ -1515,35 +1515,34 @@ public class Tester1 implements Runnable {
   }
 
   private void testBackup(){
-    final sqlite3 db1 = createNewDb();
-    final sqlite3 db2 = createNewDb();
+    final sqlite3 dbDest = createNewDb();
 
-    execSql(db1, new String[]{
-        "pragma page_size=512; VACUUM;",
-        "create table t(a);",
-        "insert into t(a) values(1),(2),(3);"
-      });
-    affirm( null==sqlite3_backup_init(db1,"main",db1,"main") );
-    final sqlite3_backup b = sqlite3_backup_init(db2,"main",db1,"main");
-    affirm( null!=b );
-    affirm( b.getNativePointer()!=0 );
-    int rc;
-    while( SQLITE_DONE!=(rc = sqlite3_backup_step(b, 1)) ){
-      affirm( 0==rc );
+    try (sqlite3 dbSrc = createNewDb()) {
+      execSql(dbSrc, new String[]{
+          "pragma page_size=512; VACUUM;",
+          "create table t(a);",
+          "insert into t(a) values(1),(2),(3);"
+        });
+      affirm( null==sqlite3_backup_init(dbSrc,"main",dbSrc,"main") );
+      try (sqlite3_backup b = sqlite3_backup_init(dbDest,"main",dbSrc,"main")) {
+        affirm( null!=b );
+        affirm( b.getNativePointer()!=0 );
+        int rc;
+        while( SQLITE_DONE!=(rc = sqlite3_backup_step(b, 1)) ){
+          affirm( 0==rc );
+        }
+        affirm( sqlite3_backup_pagecount(b) > 0 );
+        rc = sqlite3_backup_finish(b);
+        affirm( 0==rc );
+        affirm( b.getNativePointer()==0 );
+      }
     }
-    affirm( sqlite3_backup_pagecount(b) > 0 );
-    rc = sqlite3_backup_finish(b);
-    affirm( 0==rc );
-    affirm( b.getNativePointer()==0 );
 
-    sqlite3_close_v2(db1);
-
-    final sqlite3_stmt stmt = prepare(db2,"SELECT sum(a) from t");
-    sqlite3_step(stmt);
-    affirm( sqlite3_column_int(stmt,0) == 6 );
-
-    sqlite3_finalize(stmt);
-    sqlite3_close_v2(db2);
+    try (sqlite3_stmt stmt = prepare(dbDest,"SELECT sum(a) from t")) {
+      sqlite3_step(stmt);
+      affirm( sqlite3_column_int(stmt,0) == 6 );
+    }
+    sqlite3_close_v2(dbDest);
   }
 
   private void testRandomness(){
