@@ -2036,6 +2036,12 @@ static void udf_xInverse(sqlite3_context* cx, int argc,
   JniDecl(jint,JniNameSuffix)(JniArgsEnvClass, jlong jpSValue){ \
     return (jint)CName(S3JniLongPtr_sqlite3_value(jpSValue));   \
   }
+/** Create a trivial JNI wrapper for (boolean CName(sqlite3_value*)). */
+#define WRAP_BOOL_SVALUE(JniNameSuffix,CName)                       \
+  JniDecl(jboolean,JniNameSuffix)(JniArgsEnvClass, jlong jpSValue){ \
+    return (jint)CName(S3JniLongPtr_sqlite3_value(jpSValue))        \
+      ? JNI_TRUE : JNI_FALSE;                                       \
+  }
 
 WRAP_INT_DB(1changes,                  sqlite3_changes)
 WRAP_INT64_DB(1changes64,              sqlite3_changes64)
@@ -2075,7 +2081,7 @@ WRAP_INT64_DB(1total_1changes64,       sqlite3_total_changes64)
 WRAP_INT_SVALUE(1value_1bytes,         sqlite3_value_bytes)
 WRAP_INT_SVALUE(1value_1bytes16,       sqlite3_value_bytes16)
 WRAP_INT_SVALUE(1value_1encoding,      sqlite3_value_encoding)
-WRAP_INT_SVALUE(1value_1frombind,      sqlite3_value_frombind)
+WRAP_BOOL_SVALUE(1value_1frombind,     sqlite3_value_frombind)
 WRAP_INT_SVALUE(1value_1nochange,      sqlite3_value_nochange)
 WRAP_INT_SVALUE(1value_1numeric_1type, sqlite3_value_numeric_type)
 WRAP_INT_SVALUE(1value_1subtype,       sqlite3_value_subtype)
@@ -2083,6 +2089,7 @@ WRAP_INT_SVALUE(1value_1type,          sqlite3_value_type)
 
 #undef WRAP_BOOL_DB
 #undef WRAP_BOOL_STMT
+#undef WRAP_BOOL_SVALUE
 #undef WRAP_INT64_DB
 #undef WRAP_INT_DB
 #undef WRAP_INT_INT
@@ -3379,20 +3386,51 @@ S3JniApi(sqlite3_errstr(),jstring,1errstr)(
   return rv;
 }
 
-S3JniApi(sqlite3_expanded_sql(),jstring,1expanded_1sql)(
-  JniArgsEnvClass, jobject jpStmt
-){
+#ifndef SQLITE_ENABLE_NORMALIZE
+/* Dummy stub for sqlite3_normalized_sql(). Never called. */
+static const char * sqlite3_normalized_sql(sqlite3_stmt *s){
+  S3JniDeclLocal_env;
+  (*env)->FatalError(env, "dummy sqlite3_normalized_sql() was "
+                     "impossibly called.") /* does not return */;
+  return 0;
+}
+#endif
+
+/*
+** Impl for sqlite3_expanded_sql() (if isExpanded is true) and
+** sqlite3_normalized_sql().
+*/
+static jstring s3jni_xn_sql(int isExpanded, JNIEnv *env, jobject jpStmt){
   jstring rv = 0;
   sqlite3_stmt * const pStmt = PtrGet_sqlite3_stmt(jpStmt);
+
   if( pStmt ){
-    char * zSql = sqlite3_expanded_sql(pStmt);
+    char * zSql = isExpanded
+      ? sqlite3_expanded_sql(pStmt)
+      : (char*)sqlite3_normalized_sql(pStmt);
     s3jni_oom_fatal(zSql);
     if( zSql ){
-      rv = s3jni_utf8_to_jstring( zSql, -1);
-      sqlite3_free(zSql);
+      rv = s3jni_utf8_to_jstring(zSql, -1);
+      if( isExpanded ) sqlite3_free(zSql);
     }
   }
   return rv;
+}
+
+S3JniApi(sqlite3_expanded_sql(),jstring,1expanded_1sql)(
+  JniArgsEnvClass, jobject jpStmt
+){
+  return s3jni_xn_sql(1, env, jpStmt);
+}
+
+S3JniApi(sqlite3_normalized_sql(),jstring,1normalized_1sql)(
+  JniArgsEnvClass, jobject jpStmt
+){
+#ifdef SQLITE_ENABLE_NORMALIZE
+  return s3jni_xn_sql(0, env, jpStmt);
+#else
+  return 0;
+#endif
 }
 
 S3JniApi(sqlite3_extended_result_codes(),jboolean,1extended_1result_1codes)(

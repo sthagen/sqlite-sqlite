@@ -399,6 +399,16 @@ public class Tester1 implements Runnable {
     affirm( !sqlite3_stmt_busy(stmt) );
     sqlite3_finalize(stmt);
     affirm(total1 == total2);
+
+    // sqlite3_value_frombind() checks...
+    stmt = prepare(db, "SELECT 1, ?");
+    sqlite3_bind_int(stmt, 1, 2);
+    rc = sqlite3_step(stmt);
+    affirm( SQLITE_ROW==rc );
+    affirm( !sqlite3_value_frombind(sqlite3_column_value(stmt, 0)) );
+    affirm( sqlite3_value_frombind(sqlite3_column_value(stmt, 1)) );
+    sqlite3_finalize(stmt);
+
     sqlite3_close_v2(db);
     affirm(0 == db.getNativePointer());
   }
@@ -550,7 +560,10 @@ public class Tester1 implements Runnable {
     sqlite3_finalize(stmt);
     stmt = prepare(db, "SELECT ?");
     sqlite3_bind_text(stmt, 1, "hell😃");
-    affirm( "SELECT 'hell😃'".equals(sqlite3_expanded_sql(stmt)) );
+    final String expect = "SELECT 'hell😃'";
+    affirm( expect.equals(sqlite3_expanded_sql(stmt)) );
+    String n = sqlite3_normalized_sql(stmt);
+    affirm( null==n || expect.equals(n) );
     sqlite3_finalize(stmt);
     sqlite3_close(db);
   }
