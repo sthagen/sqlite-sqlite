@@ -147,6 +147,7 @@
 #include "sqlite3-jni.h"
 #include <assert.h>
 #include <stdio.h> /* only for testing/debugging */
+#include <stdint.h> /* intptr_t for 32-bit builds */
 
 /* Only for debugging */
 #define MARKER(pfexp)                                               \
@@ -173,6 +174,18 @@
 ** See the many examples in this file.
 */
 #define S3JniApi(CFunc,ReturnType,Suffix) JniDecl(ReturnType,Suffix)
+
+/*
+** S3JniCast_L2P and P2L cast jlong (64-bit) to/from pointers. This is
+** required for casting warning-free on 32-bit builds, where we
+** otherwise get complaints that we're casting between different-sized
+** int types.
+**
+** This use of intptr_t is the _only_ reason we require <stdint.h>
+** which, in turn, requires building with -std=c99 (or later).
+*/
+#define S3JniCast_L2P(JLongAsPtr) (void*)((intptr_t)(JLongAsPtr))
+#define S3JniCast_P2L(PTR) (jlong)((intptr_t)(PTR))
 
 /*
 ** Shortcuts for the first 2 parameters to all JNI bindings.
@@ -1397,7 +1410,8 @@ static jfieldID s3jni_nphop_field(JNIEnv * const env, S3JniNphOp const* pRef){
 static void NativePointerHolder__set(JNIEnv * const env, S3JniNphOp const* pRef,
                                      jobject jNph, const void * p){
   assert( jNph );
-  (*env)->SetLongField(env, jNph, s3jni_nphop_field(env, pRef), (jlong)p);
+  (*env)->SetLongField(env, jNph, s3jni_nphop_field(env, pRef),
+                       S3JniCast_P2L(p));
   S3JniExceptionIsFatal("Could not set NativePointerHolder.nativePointer.");
 }
 
@@ -1413,7 +1427,9 @@ static void * NativePointerHolder__get(JNIEnv * env, jobject jNph,
                                        S3JniNphOp const* pRef){
   void * rv = 0;
   if( jNph ){
-    rv = (void*)(*env)->GetLongField(env, jNph, s3jni_nphop_field(env, pRef));
+    rv = S3JniCast_L2P(
+      (*env)->GetLongField(env, jNph, s3jni_nphop_field(env, pRef))
+    );
     S3JniExceptionIsFatal("Cannot fetch NativePointerHolder.nativePointer.");
   }
   return rv;
@@ -1451,13 +1467,12 @@ static void * NativePointerHolder__get(JNIEnv * env, jobject jNph,
 ** now do the native pointer extraction in the Java side, rather than
 ** the C side, because it's reportedly significantly faster.
 */
-#define S3JniLongPtr_T(T,JLongPtr) (T*)(JLongPtr)
-#define S3JniLongPtr_sqlite3(JLongPtr) S3JniLongPtr_T(sqlite3,JLongPtr)
-#define S3JniLongPtr_sqlite3_backup(JLongPtr) S3JniLongPtr_T(sqlite3_backup,JLongPtr)
-#define S3JniLongPtr_sqlite3_blob(JLongPtr) S3JniLongPtr_T(sqlite3_blob,JLongPtr)
-#define S3JniLongPtr_sqlite3_stmt(JLongPtr) S3JniLongPtr_T(sqlite3_stmt,JLongPtr)
-#define S3JniLongPtr_sqlite3_value(JLongPtr) S3JniLongPtr_T(sqlite3_value,JLongPtr)
-
+#define S3JniLongPtr_T(T,JLongAsPtr) (T*)((intptr_t)(JLongAsPtr))
+#define S3JniLongPtr_sqlite3(JLongAsPtr) S3JniLongPtr_T(sqlite3,JLongAsPtr)
+#define S3JniLongPtr_sqlite3_backup(JLongAsPtr) S3JniLongPtr_T(sqlite3_backup,JLongAsPtr)
+#define S3JniLongPtr_sqlite3_blob(JLongAsPtr) S3JniLongPtr_T(sqlite3_blob,JLongAsPtr)
+#define S3JniLongPtr_sqlite3_stmt(JLongAsPtr) S3JniLongPtr_T(sqlite3_stmt,JLongAsPtr)
+#define S3JniLongPtr_sqlite3_value(JLongAsPtr) S3JniLongPtr_T(sqlite3_value,JLongAsPtr)
 /*
 ** Extracts the new S3JniDb instance from the free-list, or allocates
 ** one if needed, associates it with pDb, and returns.  Returns NULL
@@ -2109,7 +2124,7 @@ S3JniApi(sqlite3_aggregate_context(),jlong,1aggregate_1context)(
                                            ? (int)sizeof(void*)
                                            : 0))
     : 0;
-  return (jlong)p;
+  return S3JniCast_P2L(p);
 }
 
 /* Central auto-extension handler. */
@@ -2755,8 +2770,8 @@ S3JniApi(sqlite3_column_text(),jbyteArray,1column_1text)(
   JniArgsEnvClass, jobject jpStmt, jint ndx
 ){
   sqlite3_stmt * const stmt = PtrGet_sqlite3_stmt(jpStmt);
-  const int n = sqlite3_column_bytes(stmt, (int)ndx);
   const unsigned char * const p = sqlite3_column_text(stmt, (int)ndx);
+  const int n = sqlite3_column_bytes(stmt, (int)ndx);
   return p ? s3jni_new_jbyteArray(p, n) : NULL;
 }
 
@@ -2766,8 +2781,8 @@ S3JniApi(sqlite3_column_text(),jstring,1column_1text)(
   JniArgsEnvClass, jobject jpStmt, jint ndx
 ){
   sqlite3_stmt * const stmt = PtrGet_sqlite3_stmt(jpStmt);
-  const int n = sqlite3_column_bytes(stmt, (int)ndx);
   const unsigned char * const p = sqlite3_column_text(stmt, (int)ndx);
+  const int n = sqlite3_column_bytes(stmt, (int)ndx);
   return p ? s3jni_utf8_to_jstring( (const char *)p, n) : 0;
 }
 #endif
@@ -2776,8 +2791,8 @@ S3JniApi(sqlite3_column_text16(),jstring,1column_1text16)(
   JniArgsEnvClass, jobject jpStmt, jint ndx
 ){
   sqlite3_stmt * const stmt = PtrGet_sqlite3_stmt(jpStmt);
-  const int n = sqlite3_column_bytes16(stmt, (int)ndx);
   const void * const p = sqlite3_column_text16(stmt, (int)ndx);
+  const int n = sqlite3_column_bytes16(stmt, (int)ndx);
   return s3jni_text16_to_jstring(env, p, n);
 }
 
@@ -4670,8 +4685,8 @@ S3JniApi(sqlite3_value_blob(),jbyteArray,1value_1blob)(
   JniArgsEnvClass, jlong jpSVal
 ){
   sqlite3_value * const sv = S3JniLongPtr_sqlite3_value(jpSVal);
-  int const nLen = sqlite3_value_bytes(sv);
   const jbyte * pBytes = sqlite3_value_blob(sv);
+  int const nLen = sqlite3_value_bytes(sv);
 
   s3jni_oom_check( nLen ? !!pBytes : 1 );
   return pBytes
@@ -4723,8 +4738,8 @@ S3JniApi(sqlite3_value_text(),jbyteArray,1value_1text)(
   JniArgsEnvClass, jlong jpSVal
 ){
   sqlite3_value * const sv = S3JniLongPtr_sqlite3_value(jpSVal);
-  int const n = sqlite3_value_bytes(sv);
   const unsigned char * const p = sqlite3_value_text(sv);
+  int const n = sqlite3_value_bytes(sv);
   return p ? s3jni_new_jbyteArray(p, n) : 0;
 }
 
@@ -4734,8 +4749,8 @@ S3JniApi(sqlite3_value_text(),jstring,1value_1text)(
   JniArgsEnvClass, jlong jpSVal
 ){
   sqlite3_value * const sv = S3JniLongPtr_sqlite3_value(jpSVal);
-  int const n = sqlite3_value_bytes(sv);
   const unsigned char * const p = sqlite3_value_text(sv);
+  int const n = sqlite3_value_bytes(sv);
   return p ? s3jni_utf8_to_jstring( (const char *)p, n) : 0;
 }
 #endif
@@ -5169,9 +5184,11 @@ static void s3jni_phraseIter_NToJ(JNIEnv *const env,
                                   jobject jIter){
   S3JniGlobalType * const g = &S3JniGlobal;
   assert(g->fts5.jPhraseIter.fidA);
-  (*env)->SetLongField(env, jIter, g->fts5.jPhraseIter.fidA, (jlong)pSrc->a);
+  (*env)->SetLongField(env, jIter, g->fts5.jPhraseIter.fidA,
+                       S3JniCast_P2L(pSrc->a));
   S3JniExceptionIsFatal("Cannot set Fts5PhraseIter.a field.");
-  (*env)->SetLongField(env, jIter, g->fts5.jPhraseIter.fidB, (jlong)pSrc->b);
+  (*env)->SetLongField(env, jIter, g->fts5.jPhraseIter.fidB,
+                       S3JniCast_P2L(pSrc->b));
   S3JniExceptionIsFatal("Cannot set Fts5PhraseIter.b field.");
 }
 
@@ -5180,11 +5197,13 @@ static void s3jni_phraseIter_JToN(JNIEnv *const env,  jobject jIter,
                                   Fts5PhraseIter * const pDest){
   S3JniGlobalType * const g = &S3JniGlobal;
   assert(g->fts5.jPhraseIter.fidA);
-  pDest->a =
-    (const unsigned char *)(*env)->GetLongField(env, jIter, g->fts5.jPhraseIter.fidA);
+  pDest->a = S3JniCast_L2P(
+    (*env)->GetLongField(env, jIter, g->fts5.jPhraseIter.fidA)
+  );
   S3JniExceptionIsFatal("Cannot get Fts5PhraseIter.a field.");
-  pDest->b =
-    (const unsigned char *)(*env)->GetLongField(env, jIter, g->fts5.jPhraseIter.fidB);
+  pDest->b = S3JniCast_L2P(
+    (*env)->GetLongField(env, jIter, g->fts5.jPhraseIter.fidB)
+  );
   S3JniExceptionIsFatal("Cannot get Fts5PhraseIter.b field.");
 }
 

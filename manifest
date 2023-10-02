@@ -1,5 +1,5 @@
-C Add\sJNI\sbinding\sfor\ssqlite3_normalized_sql().
-D 2023-10-01T12:15:38.078
+C JNI:\swhen\sfetching\stext-or-blob/length\spairs,\sfetch\sthe\stext-or-blob\sfirst,\sthen\sthe\slength,\sas\sthe\sAPI\sdocs\ssuggest.
+D 2023-10-02T17:12:16.304
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -235,10 +235,10 @@ F ext/fts5/tool/showfts5.tcl d54da0e067306663e2d5d523965ca487698e722c
 F ext/icu/README.txt 7ab7ced8ae78e3a645b57e78570ff589d4c672b71370f5aa9e1cd7024f400fc9
 F ext/icu/icu.c c074519b46baa484bb5396c7e01e051034da8884bad1a1cb7f09bbe6be3f0282
 F ext/icu/sqliteicu.h fa373836ed5a1ee7478bdf8a1650689294e41d0c89c1daab26e9ae78a32075a8
-F ext/jni/GNUmakefile 795caa6318c9ddbe6d3677b63e43dcdf3d20bc517b124819e6ba480e6e1c33b1
+F ext/jni/GNUmakefile 7278812b41ced95fe67a9e5823aee027d641fd26fdfabe66c62b102a3a4e0631
 F ext/jni/README.md 9fceaeb17cecdc5d699dfc83c0cbc3a03fdb3b86bf676381894166c73375ee75
 F ext/jni/jar-dist.make 030aaa4ae71dd86e4ec5e7c1e6cd86f9dfa47c4592c070d2e35157e42498e1fa
-F ext/jni/src/c/sqlite3-jni.c f308c04cc96e3aca5e58655a796ecbd688dac5ab778b702238ebd4f4a72cee0d
+F ext/jni/src/c/sqlite3-jni.c 2c4948634fd7f6460b074b72328b9c885ec11333bbc98144f745e4d6203a7ac2
 F ext/jni/src/c/sqlite3-jni.h 74e3da791f748f02d0d684562126cf6bfdd2a85cbb6a5d1354b14fcd46e187bc
 F ext/jni/src/org/sqlite/jni/AbstractCollationCallback.java 95e88ba04f4aac51ffec65693e878e234088b2f21b387f4e4285c8b72b33e436
 F ext/jni/src/org/sqlite/jni/AggregateFunction.java 7312486bc65fecdb91753c0a4515799194e031f45edbe16a6373cea18f404dc4
@@ -263,7 +263,7 @@ F ext/jni/src/org/sqlite/jni/SQLTester.java da42be06a2d644e0b915b40508934c1f3239
 F ext/jni/src/org/sqlite/jni/SQLite3Jni.java 9860c1cebd8a38041306f2ee7563f2898fcbdf77e4bfa393fba25b4924edcb5d
 F ext/jni/src/org/sqlite/jni/ScalarFunction.java 6d387bb499fbe3bc13c53315335233dbf6a0c711e8fa7c521683219b041c614c
 F ext/jni/src/org/sqlite/jni/TableColumnMetadata.java 54511b4297fa28dcb3f49b24035e34ced10e3fd44fd0e458e784f4d6b0096dab
-F ext/jni/src/org/sqlite/jni/Tester1.java b5f68ff18f701ca7d1f6fe8bd0642de9289ed7aee422aabcaf92d03937ab097c
+F ext/jni/src/org/sqlite/jni/Tester1.java ced62ed417c3326f93d2e90b3bb64ac2db58ac42a7ad7a5965b24545434e3200
 F ext/jni/src/org/sqlite/jni/TesterFts5.java 854c737bb5c9463ee92a8ee230013e924236dd4b74d4688dd62c17f38d5837db
 F ext/jni/src/org/sqlite/jni/TraceV2Callback.java beb0b064c1a5f8bfe585a324ed39a4e33edbe379a3fc60f1401661620d3ca7c0
 F ext/jni/src/org/sqlite/jni/UpdateHookCallback.java 8376f4a931f2d5612b295c003c9515ba933ee76d8f95610e89c339727376e36c
@@ -663,7 +663,7 @@ F src/delete.c cb766727c78e715f9fb7ec8a7d03658ed2a3016343ca687acfcec9083cdca500
 F src/expr.c 8a5045ac7aae5ecebe7236ec05841693b5a0012af70a4d73933333172546c50d
 F src/fault.c 460f3e55994363812d9d60844b2a6de88826e007
 F src/fkey.c a7fcbf7e66d14dbb73cf49f31489ebf66d0e6006c62b95246924a3bae9f37b36
-F src/func.c 154f08966f8a3a7cad6c438205df1abf58fb2826961a0683e82e120fa647e84c
+F src/func.c 490341f0ad2d0a937ce03c9fd3d9396fd3be9b5a6b90228011830b3a7bf0dca2
 F src/global.c 29f56a330ed9d1b5cd9b79ac0ca36f97ac3afc730ff8bfa987b0db9e559d684d
 F src/hash.c 9ee4269fb1d6632a6fecfb9479c93a1f29271bddbbaf215dd60420bcb80c7220
 F src/hash.h 3340ab6e1d13e725571d7cee6d3e3135f0779a7d8e76a9ce0a85971fa3953c51
@@ -2122,8 +2122,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P 906e2ed3e9647f5c2355e9fea2beee141767cae7016da9fa1fe88283726b9369
-R 9775e917ddc66cb5e22618dc202f56cc
+P 325243226520376f4a142864ae3fb98866f25bff4dc50a6b648ef98428a7169f
+R 46fa2dcc5034c47ceb71e3721ad57fae
 U stephan
-Z 848b571ca2c05c3bd6bf9bbe466709a2
+Z c507ea20def3bb46f7fb137790b2fa35
 # Remove this line to create a well-formed Fossil manifest.
