@@ -1,5 +1,5 @@
-C Bug\sfix\sin\ssqlite3_analyzer:\sfor\sdatabases\slarger\sthan\s1GiB,\stake\sinto\naccount\sthe\slock-byte\spage\swhen\scalculating\sthe\snumber\sof\sfreelist\spages.
-D 2023-10-14T10:54:37.378
+C Do\snot\sallow\san\sALTER\sTABLE\sADD\sCOLUMN\son\sa\sSTRICT\stable\sif\sthe\sadded\scolumn\ncontains\sa\sDEFAULT\sclause\sthat\swould\sviolate\sthe\stype\sof\sthe\sadded\scolumn.
+D 2023-10-14T20:24:52.039
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -475,9 +475,9 @@ F ext/repair/test/checkindex01.test b530f141413b587c9eb78ff734de6bb79bc3515c3350
 F ext/repair/test/test.tcl 686d76d888dffd021f64260abf29a55c57b2cedfa7fc69150b42b1d6119aac3c
 F ext/rtree/README 6315c0d73ebf0ec40dedb5aa0e942bc8b54e3761
 F ext/rtree/geopoly.c 0dd4775e896cee6067979d67aff7c998e75c2c9d9cd8d62a1a790c09cde7adca
-F ext/rtree/rtree.c 9fdb03b602ca128c4b5b786c10675cf97cd0990d18db3b8c7a312551c3cf2f59
+F ext/rtree/rtree.c da842644466b84391e9fa1b1d5a17f461b475b8e36f1217117d1d98ad5f437e3
 F ext/rtree/rtree.h 4a690463901cb5e6127cf05eb8e642f127012fd5003830dbc974eca5802d9412
-F ext/rtree/rtree1.test 877d40b8b61b1f88cec9d4dc0ff8334f5b05299fac12a35141532e2881860e9d
+F ext/rtree/rtree1.test ecc881fdd1bc10fc390faa988ad93343739af84384e4cf3619fed7afada66a30
 F ext/rtree/rtree2.test 9d9deddbb16fd0c30c36e6b4fdc3ee3132d765567f0f9432ee71e1303d32603d
 F ext/rtree/rtree3.test 272594f88c344e973864008bbe4c71fd3a41a264c097d568593ee7886d83d409
 F ext/rtree/rtree4.test 304de65d484540111b896827e4261815e5dca4ce28eeecd58be648cd73452c4b
@@ -646,7 +646,7 @@ F sqlite.pc.in 42b7bf0d02e08b9e77734a47798d1a55a9e0716b
 F sqlite3.1 acdff36db796e2d00225b911d3047d580cd136547298435426ce9d40347973cc
 F sqlite3.pc.in 48fed132e7cb71ab676105d2a4dc77127d8c1f3a
 F sqlite_cfg.h.in baf2e409c63d4e7a765e17769b6ff17c5a82bbd9cbf1e284fd2e4cefaff3fcf2
-F src/alter.c 3ff8c2fca0c0636d43459154bb40d79c882df1b34df77f89c4ec47ab2e2389f5
+F src/alter.c 30c2333b8bb3af71e4eb9adeadee8aa20edb15917ed44b8422e5cd15f3dfcddc
 F src/analyze.c d4cc28738c29e009640ec20ebb6936ba6fcefff0d11aa93398d9bb9a5ead6c1f
 F src/attach.c cc9d00d30da916ff656038211410ccf04ed784b7564639b9b61d1839ed69fd39
 F src/auth.c 19b7ccacae3dfba23fc6f1d0af68134fa216e9040e53b0681b4715445ea030b4
@@ -812,7 +812,7 @@ F test/aggfault.test 777f269d0da5b0c2524c7ff6d99ae9a93db4f1b1839a914dd2a12e3035c
 F test/aggnested.test 7269d07ac879fce161cb26c8fabe65cba5715742fac8a1fccac570dcdaf28f00
 F test/alias.test 4529fbc152f190268a15f9384a5651bbbabc9d87
 F test/all.test 2ecb8bbd52416642e41c9081182a8df05d42c75637afd4488aace78cc4b69e13
-F test/alter.test 313073774ab5c3f2ef1d3f0d03757c9d3a81284ae7e1b4a6ca34db088f886896
+F test/alter.test 403a7f8842457044a994d0ffb42963d6e84fcfbf5e8f54556063b25d966cd454
 F test/alter2.test a966ccfcddf9ce0a4e0e6ff1aca9e6e7948e0e242cd7e43fc091948521807687
 F test/alter3.test ffc4ab29ce78a3517a66afd69b2730667e3471622509c283b2bd4c46f680fba3
 F test/alter4.test 716caa071dd8a3c6d57225778d15d3c3cbf5e34b2e84ae44199aeb2bbf50a707
@@ -2128,8 +2128,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P 348fa7aaf7958b3fb689ed023d946064ae8d92718a497a346e95114a2410cbf5
-R 491b395fcb54d24388cea619b1896c53
+P b7b2e30b570efda338c62e88446dedb6667640f33855b2422ad20c7b569b025a
+R 44739401ad1354dd510207d981352cd8
 U drh
-Z 11377a3945484d066aca86a95198dde7
+Z 26263ba5a1d7e41dc561c332fa263ba2
 # Remove this line to create a well-formed Fossil manifest.
