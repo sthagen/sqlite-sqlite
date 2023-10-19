@@ -1002,6 +1002,10 @@ void sqlite3VdbeNoJumpsOutsideSubrtn(
       int iDest = pOp->p2;   /* Jump destination */
       if( iDest==0 ) continue;
       if( pOp->opcode==OP_Gosub ) continue;
+      if( pOp->p3==20230325 && pOp->opcode==OP_NotNull ){
+        /* This is a deliberately taken illegal branch.  tag-20230325-2 */
+        continue;
+      }
       if( iDest<0 ){
         int j = ADDR(iDest);
         assert( j>=0 );
@@ -4468,7 +4472,7 @@ SQLITE_NOINLINE int sqlite3BlobCompare(const Mem *pB1, const Mem *pB2){
 */
 #if  defined(SQLITE_COVERAGE_TEST) || defined(SQLITE_DEBUG)
 static int SQLITE_NOINLINE doubleLt(double a, double b){ return a<b; }
-static int SQLITE_NOINLINE doubleEq(double a, double b){ return a=b; }
+static int SQLITE_NOINLINE doubleEq(double a, double b){ return a==b; }
 #endif
 
 /*
