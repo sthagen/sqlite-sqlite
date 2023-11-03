@@ -1,5 +1,5 @@
-C Mark\sa\sbranch\smade\salways-true\sby\sthe\spenultimate\scheck-in\swith\sALWAYS().
-D 2023-11-02T22:39:11.206
+C Fix\sa\scase\swhere\sadjacent\stokens\sare\shandled\sincorrectly\sby\sthe\sfts5\ssnippet()\sfunction.
+D 2023-11-03T17:20:20.721
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -7,7 +7,7 @@ F Makefile.in 8b59912fc1538f96a08555605c5886cdcc733696ae7f22e374b2a4752196ca20
 F Makefile.linux-gcc f3842a0b1efbfbb74ac0ef60e56b301836d05b4d867d014f714fa750048f1ab6
 F Makefile.msc f0cf219350d9af4fba411b4f6306dce2adc897484e8f446de1fb4f40de674d00
 F README.md 963d30019abf0cc06b263cd2824bce022893f3f93a531758f6f04ff2194a16a8
-F VERSION 4c09b629c03b8ae32317cb336a32f3aa3252841d6dcd51184cecc4278d08f21e
+F VERSION 73573d4545343f001bf5dc5461173a7c78c203dd046cabcf99153878cf25d3a6
 F aclocal.m4 a5c22d164aff7ed549d53a90fa56d56955281f50
 F art/sqlite370.eps aa97a671332b432a54e1d74ff5e8775be34200c2
 F art/sqlite370.ico af56c1d00fee7cd4753e8631ed60703ed0fc6e90
@@ -22,7 +22,7 @@ F autoconf/configure.ac ec7fa914c5e74ff212fe879f9bb6918e1234497e05facfb641f30c4d
 F autoconf/tea/Makefile.in 106a96f2f745d41a0f6193f1de98d7355830b65d45032c18cd7c90295ec24196
 F autoconf/tea/README 3e9a3c060f29a44344ab50aec506f4db903fb873
 F autoconf/tea/aclocal.m4 52c47aac44ce0ddb1f918b6993e8beb8eee88f43
-F autoconf/tea/configure.ac 1ee185f2f8c2e9bed69d0113222724202f962d04eafd57197e65c662d2d9b180
+F autoconf/tea/configure.ac 4c32b08691a5b296206b38422b53b92b65be3d3f6b3dd6552a50981a61f5acda
 F autoconf/tea/doc/sqlite3.n e1fe45d4f5286ee3d0ccc877aca2a0def488e9bb
 F autoconf/tea/license.terms 13bd403c9610fd2b76ece0ab50c4c5eda933d523
 F autoconf/tea/pkgIndex.tcl.in b9eb6dd37f64e08e637d576b3c83259814b9cddd78bec4af2e5abfc6c5c750ce
@@ -33,8 +33,8 @@ F autoconf/tea/win/nmakehlp.c b01f822eabbe1ed2b64e70882d97d48402b42d2689a1ea0034
 F autoconf/tea/win/rules.vc c511f222b80064096b705dbeb97060ee1d6b6d63
 F config.guess 883205ddf25b46f10c181818bf42c09da9888884af96f79e1719264345053bd6
 F config.sub c2d0260f17f3e4bc0b6808fccf1b291cb5e9126c14fc5890efc77b9fd0175559
-F configure 1d9cbcb416cb5387b3f750ae6db63cfedb703a2e46bf8ca61daecff31d208252 x
-F configure.ac de31fea7d975bb7ebafbe0e2190a855cc80d48558bf0c9a6578a1836daf1cd3a
+F configure bcb1042e92775424a1021d2f4c89c78a699a6225df01fa8c593df7df0be6ad10 x
+F configure.ac f25bd7843120f2c2b8bc9db5a92b0502bbdd28e68907415c3d42fc8e57c657b9
 F contrib/sqlitecon.tcl 210a913ad63f9f991070821e599d600bd913e0ad
 F doc/F2FS.txt c1d4a0ae9711cfe0e1d8b019d154f1c29e0d3abfe820787ba1e9ed7691160fcd
 F doc/compile-for-windows.md 50b27d77be96195c66031a3181cb8684ed822327ea834e07f9c014213e5e3bcf
@@ -89,7 +89,7 @@ F ext/fts3/unicode/parseunicode.tcl a981bd6466d12dd17967515801c3ff23f74a281be1a0
 F ext/fts5/extract_api_docs.tcl a36e54ec777172ddd3f9a88daf593b00848368e0
 F ext/fts5/fts5.h 05501612cc655504c5dce8ba765ab621d50fc478490089beaa0d75e00b23e520
 F ext/fts5/fts5Int.h 78a63cc0795186cde5384816a9403a68c65774b35d952e05b81a1b4b158e07c8
-F ext/fts5/fts5_aux.c 35c4101613eff86902877a4dedd9400b07922e412cbdd637b45041dce2fd5388
+F ext/fts5/fts5_aux.c ee770eec0af8646db9e18fc01a0dad7345b5f5e8cbba236704cfae2d777022ad
 F ext/fts5/fts5_buffer.c 3001fbabb585d6de52947b44b455235072b741038391f830d6b729225eeaf6a5
 F ext/fts5/fts5_config.c 054359543566cbff1ba65a188330660a5457299513ac71c53b3a07d934c7b081
 F ext/fts5/fts5_expr.c bd3b81ce669c4104e34ffe66570af1999a317b142c15fccb112de9fb0caa57a6
@@ -216,6 +216,7 @@ F ext/fts5/test/fts5synonym2.test 8f891fc49cc1e8daed727051e77e1f42849c784a6a54be
 F ext/fts5/test/fts5tok1.test 1f7817499f5971450d8c4a652114b3d833393c8134e32422d0af27884ffe9cef
 F ext/fts5/test/fts5tok2.test dcacb32d4a2a3f0dd3215d4a3987f78ae4be21a2
 F ext/fts5/test/fts5tokenizer.test ac3c9112b263a639fb0508ae73a3ee886bf4866d2153771a8e8a20c721305a43
+F ext/fts5/test/fts5tokenizer2.test cb5428c7cfb3b6a74b7adfcde65506e329112003e8dffa7501d01c2d18d02569
 F ext/fts5/test/fts5trigram.test 6c4e37864f3e7d90673db5563d9736d7e40080ab94d10ebdffa94c1b77941da0
 F ext/fts5/test/fts5trigram2.test 9fe4207f8a4241747aff1005258b564958588d21bfd240d6cd4c2e955d31c156
 F ext/fts5/test/fts5ubsan.test 783d5a8d13ebfa169e634940228db54540780e3ba7a87ad1e4510e61440bf64b
@@ -251,7 +252,7 @@ F ext/jni/src/org/sqlite/jni/capi/AuthorizerCallback.java 7ed409d5449684616cc924
 F ext/jni/src/org/sqlite/jni/capi/AutoExtensionCallback.java 74cc4998a73d6563542ecb90804a3c4f4e828cb4bd69e61226d1a51f4646e759
 F ext/jni/src/org/sqlite/jni/capi/BusyHandlerCallback.java 7b8e19810c42b0ad21a04b5d8c804b32ee5905d137148703f16a75b612c380ca
 F ext/jni/src/org/sqlite/jni/capi/CApi.java 24aba7b14b11da52cd47083608d37c186122c2e2072e75b2ff923d1f15bfb9e5
-F ext/jni/src/org/sqlite/jni/capi/CallbackProxy.java 0bfd6e56e8265c2f05c9207665707285534d78f8466ef0e0430c65677f00943d
+F ext/jni/src/org/sqlite/jni/capi/CallbackProxy.java 57e2d275dcebe690b1fc1f3d34eb96879b2d7039bce30b563aee547bf45d8a8b
 F ext/jni/src/org/sqlite/jni/capi/CollationCallback.java e29bcfc540fdd343e2f5cca4d27235113f2886acb13380686756d5cabdfd065a
 F ext/jni/src/org/sqlite/jni/capi/CollationNeededCallback.java f81cf10b79c52f9b2e9247d523d29ae48863935f60420eae35f257c38c80ce95
 F ext/jni/src/org/sqlite/jni/capi/CommitHookCallback.java 29c002f3c638cc80f7db1594564a262d1beb32637824c3dca2d60a224d1f71d7
@@ -271,7 +272,7 @@ F ext/jni/src/org/sqlite/jni/capi/TableColumnMetadata.java addf120e0e76e5be1ff22
 F ext/jni/src/org/sqlite/jni/capi/Tester1.java b6b2f3354ba68956a6bcd1c586b8eb25a0bd66eed2b58b340405e1129da15de9
 F ext/jni/src/org/sqlite/jni/capi/TraceV2Callback.java 0a25e117a0daae3394a77f24713e36d7b44c67d6e6d30e9e1d56a63442eef723
 F ext/jni/src/org/sqlite/jni/capi/UpdateHookCallback.java 2766b8526bbffc4f1045f70e79f1bc1b1efe1c3e95ca06cdb8a7391032dda3b4
-F ext/jni/src/org/sqlite/jni/capi/ValueHolder.java 9f9e151f1da017b706c0ee5f40f4c86b54e773d6ae4339723e0cc85a456251ab
+F ext/jni/src/org/sqlite/jni/capi/ValueHolder.java 22d365746a78c5cd7ae10c39444eb7bbf1a819aad4bb7eb77b1edc47773a3950
 F ext/jni/src/org/sqlite/jni/capi/WindowFunction.java caf4396f91b2567904cf94bc538a069fd62260d975bd037d15a02a890ed1ef9e
 F ext/jni/src/org/sqlite/jni/capi/XDestroyCallback.java f3abb8dd7381f53ebba909437090caf68200f06717b8a7d6aa96fa3e8133117d
 F ext/jni/src/org/sqlite/jni/capi/package-info.java 08ff986a65d2be9162442c82d28a65ce431d826f188520717c2ecb1484d0a50e
@@ -294,10 +295,10 @@ F ext/jni/src/org/sqlite/jni/fts5/fts5_tokenizer.java 92bdaa3893bd684533004d64ad
 F ext/jni/src/org/sqlite/jni/test-script-interpreter.md f9f25126127045d051e918fe59004a1485311c50a13edbf18c79a6ff9160030e
 F ext/jni/src/org/sqlite/jni/wrapper1/AggregateFunction.java bbe60ac7fd8718edb215a23dc901771bcedb1df3b46d9cf6caff6f419828587f
 F ext/jni/src/org/sqlite/jni/wrapper1/ScalarFunction.java 43c43adfb7866098aadaaca1620028a6ec82d5193149970019b1cce9eb59fb03
-F ext/jni/src/org/sqlite/jni/wrapper1/SqlFunction.java 9be20f3ba6edbe63285224d5d640dbfb0d84fb8cf5134084e3ae40004ec9d6d9
-F ext/jni/src/org/sqlite/jni/wrapper1/Sqlite.java fae71b7454fa3d9243ad26c80e55b590c044a0f0a23d18cae21f0cfa3a92a969
+F ext/jni/src/org/sqlite/jni/wrapper1/SqlFunction.java 0b01b9058ef6737c85b505c6aa2490fb1dc1d974fb39d88a93269fed09553f9f
+F ext/jni/src/org/sqlite/jni/wrapper1/Sqlite.java 1c95f5e0f872aeb9cdd174cbb2e254d158df1f8b2fee9f0e6ec82c348602a7bd
 F ext/jni/src/org/sqlite/jni/wrapper1/SqliteException.java aa85b4b05fae240b14f3d332f9524a2f80c619fb03856be72b4adda866b63b72
-F ext/jni/src/org/sqlite/jni/wrapper1/Tester2.java 13008f8d3c34c1dd55c3afe6dd18dcf94316874cde893ab0661a973fc51a87a4
+F ext/jni/src/org/sqlite/jni/wrapper1/Tester2.java 9ab7e38e6741842f8e3b74cd3ecb4953e2f1957f5229bd32663df7331245ce95
 F ext/jni/src/org/sqlite/jni/wrapper1/ValueHolder.java 7b89a7391f771692c5b83b0a5b86266abe8d59f1c77d7a0eccc9b79f259d79af
 F ext/jni/src/org/sqlite/jni/wrapper1/WindowFunction.java 1a1afbafbd7406ff67e7d6405541c6347517c731de535a97d7a3df1d4db835b4
 F ext/jni/src/tests/000-000-sanity.test c3427a0e0ac84d7cbe4c95fdc1cd4b61f9ddcf43443408f3000139478c4dc745
@@ -2108,7 +2109,7 @@ F tool/sqltclsh.c.in 1bcc2e9da58fadf17b0bf6a50e68c1159e602ce057210b655d50bad5aaa
 F tool/sqltclsh.tcl 862f4cf1418df5e1315b5db3b5ebe88969e2a784525af5fbf9596592f14ed848
 F tool/src-verify.c 41c586dee84d0b190ad13e0282ed83d4a65ec9fefde9adf4943efdf6558eea7f
 F tool/srcck1.c 371de5363b70154012955544f86fdee8f6e5326f
-F tool/srctree-check.tcl 9f1098d439159692ece45cc9e701b35df4956269399fe0c770e41f235d1ce5e6
+F tool/srctree-check.tcl c15f860a3c97d5f7b4c14b60392d9466af29dd006c4ef18127f502641e2977a8
 F tool/stack_usage.tcl f8e71b92cdb099a147dad572375595eae55eca43
 F tool/stripccomments.c 20b8aabc4694d0d4af5566e42da1f1a03aff057689370326e9269a9ddcffdc37
 F tool/symbols-mingw.sh 4dbcea7e74768305384c9fd2ed2b41bbf9f0414d
@@ -2141,8 +2142,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P 51002079e0b499e116415189a913a238e95ed9766a8af9d042928f4263861a87
-R 9d50cc29331e7855a28167bfb1447137
-U drh
-Z 2c58aac6deeb8398d0c95f4c1cc7c832
+P 8fea23dc3af023ccf2909f1b4c6f91e7df0ffaac875b15f1fb3e264fba169b6a
+R bb87795876c08bb47ab6453eb0b91bfd
+U dan
+Z 9c5031581d089ce3bdbdbf8fe6594110
 # Remove this line to create a well-formed Fossil manifest.

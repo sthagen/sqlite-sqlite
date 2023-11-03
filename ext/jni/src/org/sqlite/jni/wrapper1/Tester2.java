@@ -412,6 +412,38 @@ public class Tester2 implements Runnable {
     db.close();
   }
 
+  private void testKeyword(){
+    final int n = Sqlite.keywordCount();
+    affirm( n>0 );
+    affirm( !Sqlite.keywordCheck("_nope_") );
+    affirm( Sqlite.keywordCheck("seLect") );
+    affirm( null!=Sqlite.keywordName(0) );
+    affirm( null!=Sqlite.keywordName(n-1) );
+    affirm( null==Sqlite.keywordName(n) );
+  }
+
+
+  private void testExplain(){
+    final Sqlite db = openDb();
+    Sqlite.Stmt q = db.prepare("SELECT 1");
+    affirm( 0 == q.isExplain() );
+    q.explain(0);
+    affirm( 0 == q.isExplain() );
+    q.explain(1);
+    affirm( 1 == q.isExplain() );
+    q.explain(2);
+    affirm( 2 == q.isExplain() );
+    Exception ex = null;
+    try{
+      q.explain(-1);
+    }catch(Exception e){
+      ex = e;
+    }
+    affirm( ex instanceof SqliteException );
+    q.finalizeStmt();
+    db.close();
+  }
+
   private void runTests(boolean fromThread) throws Exception {
     List<java.lang.reflect.Method> mlist = testMethods;
     affirm( null!=mlist );
@@ -529,7 +561,7 @@ public class Tester2 implements Runnable {
     }
 
     if( sqlLog ){
-      if( CApi.sqlite3_compileoption_used("ENABLE_SQLLOG") ){
+      if( Sqlite.compileOptionUsed("ENABLE_SQLLOG") ){
         final ConfigSqllogCallback log = new ConfigSqllogCallback() {
             @Override public void call(sqlite3 db, String msg, int op){
               switch(op){
