@@ -44,6 +44,20 @@ public final class Sqlite implements AutoCloseable  {
   public static final int STATUS_PAGECACHE_SIZE = CApi.SQLITE_STATUS_PAGECACHE_SIZE;
   public static final int STATUS_MALLOC_COUNT = CApi.SQLITE_STATUS_MALLOC_COUNT;
 
+  public static final int DBSTATUS_LOOKASIDE_USED = CApi.SQLITE_DBSTATUS_LOOKASIDE_USED;
+  public static final int DBSTATUS_CACHE_USED = CApi.SQLITE_DBSTATUS_CACHE_USED;
+  public static final int DBSTATUS_SCHEMA_USED = CApi.SQLITE_DBSTATUS_SCHEMA_USED;
+  public static final int DBSTATUS_STMT_USED = CApi.SQLITE_DBSTATUS_STMT_USED;
+  public static final int DBSTATUS_LOOKASIDE_HIT = CApi.SQLITE_DBSTATUS_LOOKASIDE_HIT;
+  public static final int DBSTATUS_LOOKASIDE_MISS_SIZE = CApi.SQLITE_DBSTATUS_LOOKASIDE_MISS_SIZE;
+  public static final int DBSTATUS_LOOKASIDE_MISS_FULL = CApi.SQLITE_DBSTATUS_LOOKASIDE_MISS_FULL;
+  public static final int DBSTATUS_CACHE_HIT = CApi.SQLITE_DBSTATUS_CACHE_HIT;
+  public static final int DBSTATUS_CACHE_MISS = CApi.SQLITE_DBSTATUS_CACHE_MISS;
+  public static final int DBSTATUS_CACHE_WRITE = CApi.SQLITE_DBSTATUS_CACHE_WRITE;
+  public static final int DBSTATUS_DEFERRED_FKS = CApi.SQLITE_DBSTATUS_DEFERRED_FKS;
+  public static final int DBSTATUS_CACHE_USED_SHARED = CApi.SQLITE_DBSTATUS_CACHE_USED_SHARED;
+  public static final int DBSTATUS_CACHE_SPILL = CApi.SQLITE_DBSTATUS_CACHE_SPILL;
+
   public static final int LIMIT_LENGTH = CApi.SQLITE_LIMIT_LENGTH;
   public static final int LIMIT_SQL_LENGTH = CApi.SQLITE_LIMIT_SQL_LENGTH;
   public static final int LIMIT_COLUMN = CApi.SQLITE_LIMIT_COLUMN;
@@ -61,9 +75,48 @@ public final class Sqlite implements AutoCloseable  {
   public static final int PREPARE_NORMALIZE = CApi.SQLITE_PREPARE_NORMALIZE;
   public static final int PREPARE_NO_VTAB = CApi.SQLITE_PREPARE_NO_VTAB;
 
+  public static final int TRACE_STMT = CApi.SQLITE_TRACE_STMT;
+  public static final int TRACE_PROFILE = CApi.SQLITE_TRACE_PROFILE;
+  public static final int TRACE_ROW = CApi.SQLITE_TRACE_ROW;
+  public static final int TRACE_CLOSE = CApi.SQLITE_TRACE_CLOSE;
+  public static final int TRACE_ALL = TRACE_STMT | TRACE_PROFILE | TRACE_ROW | TRACE_CLOSE;
+
+  public static final int DBCONFIG_ENABLE_FKEY = CApi.SQLITE_DBCONFIG_ENABLE_FKEY;
+  public static final int DBCONFIG_ENABLE_TRIGGER = CApi.SQLITE_DBCONFIG_ENABLE_TRIGGER;
+  public static final int DBCONFIG_ENABLE_FTS3_TOKENIZER = CApi.SQLITE_DBCONFIG_ENABLE_FTS3_TOKENIZER;
+  public static final int DBCONFIG_ENABLE_LOAD_EXTENSION = CApi.SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION;
+  public static final int DBCONFIG_NO_CKPT_ON_CLOSE = CApi.SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE;
+  public static final int DBCONFIG_ENABLE_QPSG = CApi.SQLITE_DBCONFIG_ENABLE_QPSG;
+  public static final int DBCONFIG_TRIGGER_EQP = CApi.SQLITE_DBCONFIG_TRIGGER_EQP;
+  public static final int DBCONFIG_RESET_DATABASE = CApi.SQLITE_DBCONFIG_RESET_DATABASE;
+  public static final int DBCONFIG_DEFENSIVE = CApi.SQLITE_DBCONFIG_DEFENSIVE;
+  public static final int DBCONFIG_WRITABLE_SCHEMA = CApi.SQLITE_DBCONFIG_WRITABLE_SCHEMA;
+  public static final int DBCONFIG_LEGACY_ALTER_TABLE = CApi.SQLITE_DBCONFIG_LEGACY_ALTER_TABLE;
+  public static final int DBCONFIG_DQS_DML = CApi.SQLITE_DBCONFIG_DQS_DML;
+  public static final int DBCONFIG_DQS_DDL = CApi.SQLITE_DBCONFIG_DQS_DDL;
+  public static final int DBCONFIG_ENABLE_VIEW = CApi.SQLITE_DBCONFIG_ENABLE_VIEW;
+  public static final int DBCONFIG_LEGACY_FILE_FORMAT = CApi.SQLITE_DBCONFIG_LEGACY_FILE_FORMAT;
+  public static final int DBCONFIG_TRUSTED_SCHEMA = CApi.SQLITE_DBCONFIG_TRUSTED_SCHEMA;
+  public static final int DBCONFIG_STMT_SCANSTATUS = CApi.SQLITE_DBCONFIG_STMT_SCANSTATUS;
+  public static final int DBCONFIG_REVERSE_SCANORDER = CApi.SQLITE_DBCONFIG_REVERSE_SCANORDER;
+
   //! Used only by the open() factory functions.
   private Sqlite(sqlite3 db){
     this.db = db;
+  }
+
+  /** Maps org.sqlite.jni.capi.sqlite3 to Sqlite instances. */
+  private static final java.util.Map<org.sqlite.jni.capi.sqlite3, Sqlite> nativeToWrapper
+    = new java.util.HashMap<>();
+
+  /**
+     Returns the Sqlite object associated with the given sqlite3
+     object, or null if there is no such mapping.
+  */
+  static Sqlite fromNative(sqlite3 low){
+    synchronized(nativeToWrapper){
+      return nativeToWrapper.get(low);
+    }
   }
 
   /**
@@ -84,7 +137,11 @@ public final class Sqlite implements AutoCloseable  {
       n.close();
       throw ex;
     }
-    return new Sqlite(n);
+    Sqlite rv = new Sqlite(n);
+    synchronized(nativeToWrapper){
+      nativeToWrapper.put(n, rv);
+    }
+    return rv;
   }
 
   public static Sqlite open(String filename, int flags){
@@ -107,23 +164,56 @@ public final class Sqlite implements AutoCloseable  {
     return CApi.sqlite3_sourceid();
   }
 
+
+  /**
+     Output object for use with status() and libStatus().
+  */
+  public static final class Status {
+    /** The current value for the requested status() or libStatus() metric. */
+    long current;
+    /** The peak value for the requested status() or libStatus() metric. */
+    long peak;
+  };
+
   /**
      As per sqlite3_status64(), but returns its current and high-water
-     results as a two-element array. Throws if the first argument is
+     results as a Status object. Throws if the first argument is
      not one of the STATUS_... constants.
   */
-  public long[] libStatus(int op, boolean resetStats){
+  public static Status libStatus(int op, boolean resetStats){
     org.sqlite.jni.capi.OutputPointer.Int64 pCurrent =
       new org.sqlite.jni.capi.OutputPointer.Int64();
     org.sqlite.jni.capi.OutputPointer.Int64 pHighwater =
       new org.sqlite.jni.capi.OutputPointer.Int64();
-    final int rc = CApi.sqlite3_status64(op, pCurrent, pHighwater, resetStats);
-    checkRc(rc);
-    return new long[] {pCurrent.value, pHighwater.value};
+    checkRc2( CApi.sqlite3_status64(op, pCurrent, pHighwater, resetStats) );
+    final Status s = new Status();
+    s.current = pCurrent.value;
+    s.peak = pHighwater.value;
+    return s;
+  }
+
+  /**
+     As per sqlite3_status64(), but returns its current and high-water
+     results as a Status object. Throws if the first argument is
+     not one of the DBSTATUS_... constants or on any other misuse.
+  */
+  public Status status(int op, boolean resetStats){
+    org.sqlite.jni.capi.OutputPointer.Int32 pCurrent =
+      new org.sqlite.jni.capi.OutputPointer.Int32();
+    org.sqlite.jni.capi.OutputPointer.Int32 pHighwater =
+      new org.sqlite.jni.capi.OutputPointer.Int32();
+    checkRc( CApi.sqlite3_db_status(thisDb(), op, pCurrent, pHighwater, resetStats) );
+    final Status s = new Status();
+    s.current = pCurrent.value;
+    s.peak = pHighwater.value;
+    return s;
   }
 
   @Override public void close(){
     if(null!=this.db){
+      synchronized(nativeToWrapper){
+        nativeToWrapper.remove(this.db);
+      }
       this.db.close();
       this.db = null;
     }
@@ -222,6 +312,20 @@ public final class Sqlite implements AutoCloseable  {
         throw new SqliteException(rc);
       }else{
         throw new SqliteException(db);
+      }
+    }
+  }
+
+  /**
+     Like checkRc() but behaves as if that function were
+     called with a null db object.
+  */
+  private static void checkRc2(int rc){
+    if( 0!=rc ){
+      if( CApi.SQLITE_NOMEM==rc ){
+        throw new OutOfMemoryError();
+      }else{
+        throw new SqliteException(rc);
       }
     }
   }
@@ -349,6 +453,19 @@ public final class Sqlite implements AutoCloseable  {
   }
 
   /**
+     Analog to sqlite3_db_config() for the call forms which take one
+     of the boolean-type db configuration flags (namely the
+     DBCONFIG_... constants defined in this class). On success it
+     returns the result of that underlying call. Throws on error.
+  */
+  public boolean dbConfig(int op, boolean on){
+    org.sqlite.jni.capi.OutputPointer.Int32 pOut =
+      new org.sqlite.jni.capi.OutputPointer.Int32();
+    checkRc( CApi.sqlite3_db_config(thisDb(), op, on ? 1 : 0, pOut) );
+    return pOut.get()!=0;
+  }
+
+  /**
      Analog to the variant of sqlite3_db_config() for configuring the
      SQLITE_DBCONFIG_MAINDBNAME option. Throws on error.
   */
@@ -381,7 +498,7 @@ public final class Sqlite implements AutoCloseable  {
   /**
      Analog to sqlite3_release_memory().
   */
-  public static int releaseMemory(int n){
+  public static int libReleaseMemory(int n){
     return CApi.sqlite3_release_memory(n);
   }
 
@@ -467,11 +584,71 @@ public final class Sqlite implements AutoCloseable  {
     return rv;
   }
 
+  public interface TraceCallback {
+    /**
+       Called by sqlite3 for various tracing operations, as per
+       sqlite3_trace_v2(). Note that this interface elides the 2nd
+       argument to the native trace callback, as that role is better
+       filled by instance-local state.
+
+       <p>These callbacks may throw, in which case their exceptions are
+       converted to C-level error information.
+
+       <p>The 2nd argument to this function, if non-null, will be a an
+       Sqlite or Sqlite.Stmt object, depending on the first argument
+       (see below).
+
+       <p>The final argument to this function is the "X" argument
+       documented for sqlite3_trace() and sqlite3_trace_v2(). Its type
+       depends on value of the first argument:
+
+       <p>- SQLITE_TRACE_STMT: pNative is a Sqlite.Stmt. pX is a String
+       containing the prepared SQL.
+
+       <p>- SQLITE_TRACE_PROFILE: pNative is a sqlite3_stmt. pX is a Long
+       holding an approximate number of nanoseconds the statement took
+       to run.
+
+       <p>- SQLITE_TRACE_ROW: pNative is a sqlite3_stmt. pX is null.
+
+       <p>- SQLITE_TRACE_CLOSE: pNative is a sqlite3. pX is null.
+    */
+    void call(int traceFlag, Object pNative, Object pX);
+  }
+
+  /**
+     Analog to sqlite3_trace_v2(). traceMask must be a mask of the
+     TRACE_...  constants. Pass a null callback to remove tracing.
+
+     Throws on error.
+  */
+  public void trace(int traceMask, TraceCallback callback){
+    final Sqlite self = this;
+    final org.sqlite.jni.capi.TraceV2Callback tc =
+      (null==callback) ? null : new org.sqlite.jni.capi.TraceV2Callback(){
+          @SuppressWarnings("unchecked")
+          @Override public int call(int flag, Object pNative, Object pX){
+            switch(flag){
+              case TRACE_ROW:
+              case TRACE_PROFILE:
+              case TRACE_STMT:
+                callback.call(flag, Sqlite.Stmt.fromNative((sqlite3_stmt)pNative), pX);
+                break;
+              case TRACE_CLOSE:
+                callback.call(flag, self, pX);
+                break;
+            }
+            return 0;
+          }
+        };
+    checkRc( CApi.sqlite3_trace_v2(thisDb(), traceMask, tc) );
+  };
+
   /**
      Corresponds to the sqlite3_stmt class. Use Sqlite.prepare() to
      create new instances.
   */
-  public final class Stmt implements AutoCloseable {
+  public static final class Stmt implements AutoCloseable {
     private Sqlite _db = null;
     private sqlite3_stmt stmt = null;
     /**
@@ -489,10 +666,27 @@ public final class Sqlite implements AutoCloseable  {
       this._db = db;
       this.stmt = stmt;
       this.resultColCount = CApi.sqlite3_column_count(stmt);
+      synchronized(nativeToWrapper){
+        nativeToWrapper.put(this.stmt, this);
+      }
     }
 
     sqlite3_stmt nativeHandle(){
       return stmt;
+    }
+
+    /** Maps org.sqlite.jni.capi.sqlite3_stmt to Stmt instances. */
+    private static final java.util.Map<org.sqlite.jni.capi.sqlite3_stmt, Stmt> nativeToWrapper
+      = new java.util.HashMap<>();
+
+    /**
+       Returns the Stmt object associated with the given sqlite3_stmt
+       object, or null if there is no such mapping.
+    */
+    static Stmt fromNative(sqlite3_stmt low){
+      synchronized(nativeToWrapper){
+        return nativeToWrapper.get(low);
+      }
     }
 
     /**
@@ -527,6 +721,9 @@ public final class Sqlite implements AutoCloseable  {
     public int finalizeStmt(){
       int rc = 0;
       if( null!=stmt ){
+        synchronized(nativeToWrapper){
+          nativeToWrapper.remove(this.stmt);
+        }
         sqlite3_finalize(stmt);
         stmt = null;
         _db = null;
