@@ -890,8 +890,8 @@ public final class CApi {
     return sqlite3_extended_errcode(db.getNativePointer());
   }
 
-  public static native boolean sqlite3_extended_result_codes(
-    @NotNull sqlite3 db, boolean onoff
+  public static native int sqlite3_extended_result_codes(
+    @NotNull sqlite3 db, boolean on
   );
 
   static native boolean sqlite3_get_autocommit(@NotNull long ptrToDb);
@@ -2279,7 +2279,6 @@ public final class CApi {
 
   // prepare flags
   public static final int SQLITE_PREPARE_PERSISTENT = 1;
-  public static final int SQLITE_PREPARE_NORMALIZE = 2;
   public static final int SQLITE_PREPARE_NO_VTAB = 4;
 
   // result codes

@@ -2817,7 +2817,7 @@ S3JniApi(sqlite3_collation_needed(),jint,1collation_1needed)(
   }else{
     jclass const klazz = (*env)->GetObjectClass(env, jHook);
     jmethodID const xCallback = (*env)->GetMethodID(
-      env, klazz, "call", "(Lorg/sqlite/jni/capi/sqlite3;ILjava/lang/String;)I"
+      env, klazz, "call", "(Lorg/sqlite/jni/capi/sqlite3;ILjava/lang/String;)V"
     );
     S3JniUnrefLocal(klazz);
     S3JniIfThrew {
@@ -2942,7 +2942,10 @@ static int s3jni_commit_rollback_hook_impl(int isCommit, S3JniDb * const ps){
       ? (int)(*env)->CallIntMethod(env, hook.jObj, hook.midCallback)
       : (int)((*env)->CallVoidMethod(env, hook.jObj, hook.midCallback), 0);
     S3JniIfThrew{
-      rc = s3jni_db_exception(ps->pDb, SQLITE_ERROR, "hook callback threw");
+      rc = s3jni_db_exception(ps->pDb, SQLITE_ERROR,
+                              isCommit
+                              ? "Commit hook callback threw"
+                              : "Rollback hook callback threw");
     }
     S3JniHook_localundup(hook);
   }
@@ -3593,12 +3596,14 @@ S3JniApi(sqlite3_normalized_sql(),jstring,1normalized_1sql)(
 #endif
 }
 
-S3JniApi(sqlite3_extended_result_codes(),jboolean,1extended_1result_1codes)(
+S3JniApi(sqlite3_extended_result_codes(),jint,1extended_1result_1codes)(
   JniArgsEnvClass, jobject jpDb, jboolean onoff
 ){
   sqlite3 * const pDb = PtrGet_sqlite3(jpDb);
-  int const rc = pDb ? sqlite3_extended_result_codes(pDb, onoff ? 1 : 0) : 0;
-  return rc ? JNI_TRUE : JNI_FALSE;
+  int const rc = pDb
+    ? sqlite3_extended_result_codes(pDb, onoff ? 1 : 0)
+    : SQLITE_MISUSE;
+  return rc;
 }
 
 S3JniApi(sqlite3_finalize(),jint,1finalize)(

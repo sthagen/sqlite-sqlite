@@ -1,5 +1,5 @@
-C Rework\sthe\sJNI\swrapper1\svariants\sof\sstatus()\sand\sdb_status()\sto\sbe\smore\sJava-esque.
-D 2023-11-04T13:37:42.589
+C Add\sincremental\sblob\sI/O\ssupport\sto\sJNI\swrapper1.
+D 2023-11-05T04:20:04.320
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -241,37 +241,37 @@ F ext/icu/sqliteicu.h fa373836ed5a1ee7478bdf8a1650689294e41d0c89c1daab26e9ae78a3
 F ext/jni/GNUmakefile 36919b7c4fb8447da4330df9996c7b064b766957f8b7be214a30eab55a8b8072
 F ext/jni/README.md ef9ac115e97704ea995d743b4a8334e23c659e5534c3b64065a5405256d5f2f4
 F ext/jni/jar-dist.make 030aaa4ae71dd86e4ec5e7c1e6cd86f9dfa47c4592c070d2e35157e42498e1fa
-F ext/jni/src/c/sqlite3-jni.c 53493819418048bfdc8e6f505954c7e692d4666b64c3ae732ea8319c91aac747
-F ext/jni/src/c/sqlite3-jni.h 1c45fd4689cec42f3d84d2fee41bb494016a12fcb5fd80291095590666a14015
+F ext/jni/src/c/sqlite3-jni.c b98d822a35ef4438023c3c14816b5ac17bdbd23bc838ff80b6463c3146a75d14
+F ext/jni/src/c/sqlite3-jni.h 9300900f7ec91fffa01445e1ad5815e35a7bece4c9ca07de464641f77195404a
 F ext/jni/src/org/sqlite/jni/annotation/NotNull.java a99341e88154e70447596b1af6a27c586317df41a7e0f246fd41370cd7b723b2
 F ext/jni/src/org/sqlite/jni/annotation/Nullable.java 0b1879852707f752512d4db9d7edd0d8db2f0c2612316ce1c832715e012ff6ba
 F ext/jni/src/org/sqlite/jni/annotation/package-info.java 977b374aed9d5853cbf3438ba3b0940abfa2ea4574f702a2448ee143b98ac3ca
 F ext/jni/src/org/sqlite/jni/capi/AbstractCollationCallback.java 1afa90d3f236f79cc7fcd2497e111992644f7596fbc8e8bcf7f1908ae00acd6c
 F ext/jni/src/org/sqlite/jni/capi/AggregateFunction.java 0b72cdff61533b564d65b63418129656daa9a9f30e7e7be982bd5ab394b1dbd0
-F ext/jni/src/org/sqlite/jni/capi/AuthorizerCallback.java 7ed409d5449684616cc924534e22ff6b07d361f12ad904b69ecb10e0568a8013
+F ext/jni/src/org/sqlite/jni/capi/AuthorizerCallback.java c045a5b47e02bb5f1af91973814a905f12048c428a3504fbc5266d1c1be3de5a
 F ext/jni/src/org/sqlite/jni/capi/AutoExtensionCallback.java 74cc4998a73d6563542ecb90804a3c4f4e828cb4bd69e61226d1a51f4646e759
 F ext/jni/src/org/sqlite/jni/capi/BusyHandlerCallback.java 7b8e19810c42b0ad21a04b5d8c804b32ee5905d137148703f16a75b612c380ca
-F ext/jni/src/org/sqlite/jni/capi/CApi.java d21e6c1c4557ae18bbc2eefb0882efdb36fdaecdc58823c142def994327a365b
+F ext/jni/src/org/sqlite/jni/capi/CApi.java 41da9b46718b258ad2f195f3dec7265747eff37b6b350b8c427ee290eed0d83c
 F ext/jni/src/org/sqlite/jni/capi/CallbackProxy.java 57e2d275dcebe690b1fc1f3d34eb96879b2d7039bce30b563aee547bf45d8a8b
 F ext/jni/src/org/sqlite/jni/capi/CollationCallback.java e29bcfc540fdd343e2f5cca4d27235113f2886acb13380686756d5cabdfd065a
-F ext/jni/src/org/sqlite/jni/capi/CollationNeededCallback.java f81cf10b79c52f9b2e9247d523d29ae48863935f60420eae35f257c38c80ce95
-F ext/jni/src/org/sqlite/jni/capi/CommitHookCallback.java 29c002f3c638cc80f7db1594564a262d1beb32637824c3dca2d60a224d1f71d7
+F ext/jni/src/org/sqlite/jni/capi/CollationNeededCallback.java 5bfa226a8e7a92e804fd52d6e42b4c7b875fa7a94f8e2c330af8cc244a8920ab
+F ext/jni/src/org/sqlite/jni/capi/CommitHookCallback.java 482f53dfec9e3ac2a9070d3fceebd56250932aaaf7c4f5bc8de29fc011416e0c
 F ext/jni/src/org/sqlite/jni/capi/ConfigLogCallback.java b995ca412f59b631803b93aa5b3684fce62e335d1e123207084c054abfd488d4
 F ext/jni/src/org/sqlite/jni/capi/ConfigSqllogCallback.java 701f2e4d8bdeb27cfbeeb56315d15b13d8752b0fdbca705f31bd4366c58d8a33
 F ext/jni/src/org/sqlite/jni/capi/NativePointerHolder.java b7036dcb1ef1b39f1f36ac605dde0ff1a24a9a01ade6aa1a605039443e089a61
 F ext/jni/src/org/sqlite/jni/capi/OutputPointer.java 68f60aec7aeb5cd4e5fb83449037f668c63cb99f682ee1036cc226d0cbd909b9
 F ext/jni/src/org/sqlite/jni/capi/PrepareMultiCallback.java aca8f9fa72e3b6602bc9a7dd3ae9f5b2808103fbbee9b2749dc96c19cdc261a1
-F ext/jni/src/org/sqlite/jni/capi/PreupdateHookCallback.java 819d938e26208adde17ca4b7ddde1d8cd6915b6ab7b708249a9787beca6bd6b6
+F ext/jni/src/org/sqlite/jni/capi/PreupdateHookCallback.java efcf57545c5e282d1dd332fa63329b3b218d98f356ef107a9dbe3979be82213a
 F ext/jni/src/org/sqlite/jni/capi/ProgressHandlerCallback.java 01bc0c238eed2d5f93c73522cb7849a445cc9098c2ed1e78248fa20ed1cfde5b
 F ext/jni/src/org/sqlite/jni/capi/ResultCode.java 8141171f1bcf9f46eef303b9d3c5dc2537a25ad1628f3638398d8a60cacefa7f
-F ext/jni/src/org/sqlite/jni/capi/RollbackHookCallback.java 105e324d09c207100485e7667ad172e64322c62426bb49b547e9b0dc9c33f5f0
+F ext/jni/src/org/sqlite/jni/capi/RollbackHookCallback.java e172210a2080e851ebb694c70e9f0bf89284237795e38710a7f5f1b61e3f6787
 F ext/jni/src/org/sqlite/jni/capi/SQLFunction.java 0d1e9afc9ff8a2adb94a155b72385155fa3b8011a5cca0bb3c28468c7131c1a5
 F ext/jni/src/org/sqlite/jni/capi/SQLTester.java 09bee15aa0eedac68d767ae21d9a6a62a31ade59182a3ccbf036d6463d9e30b1
 F ext/jni/src/org/sqlite/jni/capi/ScalarFunction.java 93b9700fca4c68075ccab12fe0fbbc76c91cafc9f368e835b9bd7cd7732c8615
 F ext/jni/src/org/sqlite/jni/capi/TableColumnMetadata.java addf120e0e76e5be1ff2260daa7ce305ff9b5fafd64153a7a28e9d8f000a815f
-F ext/jni/src/org/sqlite/jni/capi/Tester1.java 41e2b910a11dfdd4cc39ab608492d7c12f3791e85ac7f9d75d5445f7645a5e57
+F ext/jni/src/org/sqlite/jni/capi/Tester1.java 2898e38cf5ee568a93e760fa9b84f448acb58138d0fca18d146e80a1da7c45fc
 F ext/jni/src/org/sqlite/jni/capi/TraceV2Callback.java 0a25e117a0daae3394a77f24713e36d7b44c67d6e6d30e9e1d56a63442eef723
-F ext/jni/src/org/sqlite/jni/capi/UpdateHookCallback.java 2766b8526bbffc4f1045f70e79f1bc1b1efe1c3e95ca06cdb8a7391032dda3b4
+F ext/jni/src/org/sqlite/jni/capi/UpdateHookCallback.java c8bdf7848e6599115d601bcc9427ff902cb33129b9be32870ac6808e04b6ae56
 F ext/jni/src/org/sqlite/jni/capi/ValueHolder.java 22d365746a78c5cd7ae10c39444eb7bbf1a819aad4bb7eb77b1edc47773a3950
 F ext/jni/src/org/sqlite/jni/capi/WindowFunction.java caf4396f91b2567904cf94bc538a069fd62260d975bd037d15a02a890ed1ef9e
 F ext/jni/src/org/sqlite/jni/capi/XDestroyCallback.java f3abb8dd7381f53ebba909437090caf68200f06717b8a7d6aa96fa3e8133117d
@@ -293,14 +293,14 @@ F ext/jni/src/org/sqlite/jni/fts5/fts5_api.java a8e88c3783d21cec51b0748568a96653
 F ext/jni/src/org/sqlite/jni/fts5/fts5_extension_function.java 9e2b954d210d572552b28aca523b272fae14bd41e318921b22f65b728d5bf978
 F ext/jni/src/org/sqlite/jni/fts5/fts5_tokenizer.java 92bdaa3893bd684533004d64ade23d329843f809cd0d0f4f1a2856da6e6b4d90
 F ext/jni/src/org/sqlite/jni/test-script-interpreter.md f9f25126127045d051e918fe59004a1485311c50a13edbf18c79a6ff9160030e
-F ext/jni/src/org/sqlite/jni/wrapper1/AggregateFunction.java bbe60ac7fd8718edb215a23dc901771bcedb1df3b46d9cf6caff6f419828587f
+F ext/jni/src/org/sqlite/jni/wrapper1/AggregateFunction.java d5c108b02afd3c63c9e5e53f71f85273c1bfdc461ae526e0a0bb2b25e4df6483
 F ext/jni/src/org/sqlite/jni/wrapper1/ScalarFunction.java 43c43adfb7866098aadaaca1620028a6ec82d5193149970019b1cce9eb59fb03
-F ext/jni/src/org/sqlite/jni/wrapper1/SqlFunction.java 0b01b9058ef6737c85b505c6aa2490fb1dc1d974fb39d88a93269fed09553f9f
-F ext/jni/src/org/sqlite/jni/wrapper1/Sqlite.java ab6bee53895e5f7345b57d32ef30e9cc9c9c09979a31211f63e60dcdea9a7ab1
-F ext/jni/src/org/sqlite/jni/wrapper1/SqliteException.java aa85b4b05fae240b14f3d332f9524a2f80c619fb03856be72b4adda866b63b72
-F ext/jni/src/org/sqlite/jni/wrapper1/Tester2.java cbd087d3fcbfca384656fc2189a9b017e4afe70f0f17d8266d28c628ab97cada
+F ext/jni/src/org/sqlite/jni/wrapper1/SqlFunction.java 2833afdb9af5c1949bb35f4c926a5351fba9d1cdf0996864caa7b47827a346c7
+F ext/jni/src/org/sqlite/jni/wrapper1/Sqlite.java 6a310fe422d0daf79f7841c9b341f64d843ca7e85ef31829530623a81ecd25fa
+F ext/jni/src/org/sqlite/jni/wrapper1/SqliteException.java 982538ddb4c0719ef87dfa664cd137b09890b546029a7477810bd64d4c47ee35
+F ext/jni/src/org/sqlite/jni/wrapper1/Tester2.java a944fd0a9047a51a5074bffd707452d80cf06e715ebc78b541480ee98629fb93
 F ext/jni/src/org/sqlite/jni/wrapper1/ValueHolder.java 7b89a7391f771692c5b83b0a5b86266abe8d59f1c77d7a0eccc9b79f259d79af
-F ext/jni/src/org/sqlite/jni/wrapper1/WindowFunction.java 1a1afbafbd7406ff67e7d6405541c6347517c731de535a97d7a3df1d4db835b4
+F ext/jni/src/org/sqlite/jni/wrapper1/WindowFunction.java c7d1452f9ff26175b3c19bbf273116cc2846610af68e01756d755f037fe7319f
 F ext/jni/src/tests/000-000-sanity.test c3427a0e0ac84d7cbe4c95fdc1cd4b61f9ddcf43443408f3000139478c4dc745
 F ext/jni/src/tests/000-001-ignored.test e17e874c6ab3c437f1293d88093cf06286083b65bf162317f91bbfd92f961b70
 F ext/jni/src/tests/900-001-fts.test bf0ce17a8d082773450e91f2388f5bbb2dfa316d0b676c313c637a91198090f0
@@ -670,7 +670,7 @@ F src/build.c 189e4517d67f09f0a3e0d8e1faa6e2ef0c2e95f6ac82e33c912cb7efa2a359cc
 F src/callback.c db3a45e376deff6a16c0058163fe0ae2b73a2945f3f408ca32cf74960b28d490
 F src/complete.c a3634ab1e687055cd002e11b8f43eb75c17da23e
 F src/ctime.c 23331529e654be40ca97d171cbbffe9b3d4c71cc53b78fe5501230675952da8b
-F src/date.c eebc54a00e888d3c56147779e9f361b77d62fd69ff2008c5373946aa1ba1d574
+F src/date.c 3b8d02977d160e128469de38493b4085f7c5cf4073193459909a6af3cf6d7c91
 F src/dbpage.c 80e46e1df623ec40486da7a5086cb723b0275a6e2a7b01d9f9b5da0f04ba2782
 F src/dbstat.c 3b677254d512fcafd4d0b341bf267b38b235ccfddbef24f9154e19360fa22e43
 F src/delete.c cb766727c78e715f9fb7ec8a7d03658ed2a3016343ca687acfcec9083cdca500
@@ -1016,7 +1016,7 @@ F test/ctime.test 340f362f41f92972bbd71f44e10569a5cc694062b692231bd08aa6fe6c1c47
 F test/cursorhint.test 05cf0febe5c5f8a31f199401fd1c9322249e753950d55f26f9d5aca61408a270
 F test/cursorhint2.test 6f3aa9cb19e7418967a10ec6905209bcbb5968054da855fc36c8beee9ae9c42f
 F test/dataversion1.test 6e5e86ac681f0782e766ebcb56c019ae001522d114e0e111e5ebf68ccf2a7bb8
-F test/date.test c0d17cdfd89395bc78087b131e3538d96f864b5029c335318011accc7c0d0934
+F test/date.test ff2341a1ef71b9a27979494d299222f9a293aa22cb9ff6e9c38d88a895317ebf
 F test/date2.test 7e12ec14aaf4d5e6294b4ba140445b0eca06ea50062a9c3a69c4ee13d0b6f8b1
 F test/date3.test a1b77abf05c6772fe5ca2337cac1398892f2a41e62bce7e6be0f4a08a0e64ae5
 F test/date4.test 8aeb3de5b5e9fda968baa9357e4c0fae573724b7904943410195a19e96e31b6a
@@ -2142,8 +2142,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P b5cdcb9279d9276f24b67083839f463beecd731f46f2e8bf68fff716df0a3921
-R 9ee74b8e162e4e8a23028ccec92c6373
+P d081a126697e214082f3b203f23ea63510080e5c2aac1d8badc9e6e4bfea7c95
+R d10239966e7198eb47ba47ac2878d98e
 U stephan
-Z ce3f2fb1a954c596b6cdbc560de71d23
+Z e8e87bde5ba89e299cdcc353d989a2b2
 # Remove this line to create a well-formed Fossil manifest.

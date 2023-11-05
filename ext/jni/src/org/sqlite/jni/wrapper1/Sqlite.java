@@ -13,10 +13,11 @@
 */
 package org.sqlite.jni.wrapper1;
 import java.nio.charset.StandardCharsets;
-import static org.sqlite.jni.capi.CApi.*;
 import org.sqlite.jni.capi.CApi;
 import org.sqlite.jni.capi.sqlite3;
 import org.sqlite.jni.capi.sqlite3_stmt;
+import org.sqlite.jni.capi.sqlite3_backup;
+import org.sqlite.jni.capi.sqlite3_blob;
 import org.sqlite.jni.capi.OutputPointer;
 
 /**
@@ -29,9 +30,115 @@ import org.sqlite.jni.capi.OutputPointer;
 public final class Sqlite implements AutoCloseable  {
   private sqlite3 db;
 
+  public static final int OK = CApi.SQLITE_OK;
+  public static final int ERROR = CApi.SQLITE_ERROR;
+  public static final int INTERNAL = CApi.SQLITE_INTERNAL;
+  public static final int PERM = CApi.SQLITE_PERM;
+  public static final int ABORT = CApi.SQLITE_ABORT;
+  public static final int BUSY = CApi.SQLITE_BUSY;
+  public static final int LOCKED = CApi.SQLITE_LOCKED;
+  public static final int NOMEM = CApi.SQLITE_NOMEM;
+  public static final int READONLY = CApi.SQLITE_READONLY;
+  public static final int INTERRUPT = CApi.SQLITE_INTERRUPT;
+  public static final int IOERR = CApi.SQLITE_IOERR;
+  public static final int CORRUPT = CApi.SQLITE_CORRUPT;
+  public static final int NOTFOUND = CApi.SQLITE_NOTFOUND;
+  public static final int FULL = CApi.SQLITE_FULL;
+  public static final int CANTOPEN = CApi.SQLITE_CANTOPEN;
+  public static final int PROTOCOL = CApi.SQLITE_PROTOCOL;
+  public static final int EMPTY = CApi.SQLITE_EMPTY;
+  public static final int SCHEMA = CApi.SQLITE_SCHEMA;
+  public static final int TOOBIG = CApi.SQLITE_TOOBIG;
+  public static final int CONSTRAINT = CApi. SQLITE_CONSTRAINT;
+  public static final int MISMATCH = CApi.SQLITE_MISMATCH;
+  public static final int MISUSE = CApi.SQLITE_MISUSE;
+  public static final int NOLFS = CApi.SQLITE_NOLFS;
+  public static final int AUTH = CApi.SQLITE_AUTH;
+  public static final int FORMAT = CApi.SQLITE_FORMAT;
+  public static final int RANGE = CApi.SQLITE_RANGE;
+  public static final int NOTADB = CApi.SQLITE_NOTADB;
+  public static final int NOTICE = CApi.SQLITE_NOTICE;
+  public static final int WARNING = CApi.SQLITE_WARNING;
+  public static final int ROW = CApi.SQLITE_ROW;
+  public static final int DONE = CApi.SQLITE_DONE;
+  public static final int ERROR_MISSING_COLLSEQ = CApi.SQLITE_ERROR_MISSING_COLLSEQ;
+  public static final int ERROR_RETRY = CApi.SQLITE_ERROR_RETRY;
+  public static final int ERROR_SNAPSHOT = CApi.SQLITE_ERROR_SNAPSHOT;
+  public static final int IOERR_READ = CApi.SQLITE_IOERR_READ;
+  public static final int IOERR_SHORT_READ = CApi.SQLITE_IOERR_SHORT_READ;
+  public static final int IOERR_WRITE = CApi.SQLITE_IOERR_WRITE;
+  public static final int IOERR_FSYNC = CApi.SQLITE_IOERR_FSYNC;
+  public static final int IOERR_DIR_FSYNC = CApi.SQLITE_IOERR_DIR_FSYNC;
+  public static final int IOERR_TRUNCATE = CApi.SQLITE_IOERR_TRUNCATE;
+  public static final int IOERR_FSTAT = CApi.SQLITE_IOERR_FSTAT;
+  public static final int IOERR_UNLOCK = CApi.SQLITE_IOERR_UNLOCK;
+  public static final int IOERR_RDLOCK = CApi.SQLITE_IOERR_RDLOCK;
+  public static final int IOERR_DELETE = CApi.SQLITE_IOERR_DELETE;
+  public static final int IOERR_BLOCKED = CApi.SQLITE_IOERR_BLOCKED;
+  public static final int IOERR_NOMEM = CApi.SQLITE_IOERR_NOMEM;
+  public static final int IOERR_ACCESS = CApi.SQLITE_IOERR_ACCESS;
+  public static final int IOERR_CHECKRESERVEDLOCK = CApi.SQLITE_IOERR_CHECKRESERVEDLOCK;
+  public static final int IOERR_LOCK = CApi.SQLITE_IOERR_LOCK;
+  public static final int IOERR_CLOSE = CApi.SQLITE_IOERR_CLOSE;
+  public static final int IOERR_DIR_CLOSE = CApi.SQLITE_IOERR_DIR_CLOSE;
+  public static final int IOERR_SHMOPEN = CApi.SQLITE_IOERR_SHMOPEN;
+  public static final int IOERR_SHMSIZE = CApi.SQLITE_IOERR_SHMSIZE;
+  public static final int IOERR_SHMLOCK = CApi.SQLITE_IOERR_SHMLOCK;
+  public static final int IOERR_SHMMAP = CApi.SQLITE_IOERR_SHMMAP;
+  public static final int IOERR_SEEK = CApi.SQLITE_IOERR_SEEK;
+  public static final int IOERR_DELETE_NOENT = CApi.SQLITE_IOERR_DELETE_NOENT;
+  public static final int IOERR_MMAP = CApi.SQLITE_IOERR_MMAP;
+  public static final int IOERR_GETTEMPPATH = CApi.SQLITE_IOERR_GETTEMPPATH;
+  public static final int IOERR_CONVPATH = CApi.SQLITE_IOERR_CONVPATH;
+  public static final int IOERR_VNODE = CApi.SQLITE_IOERR_VNODE;
+  public static final int IOERR_AUTH = CApi.SQLITE_IOERR_AUTH;
+  public static final int IOERR_BEGIN_ATOMIC = CApi.SQLITE_IOERR_BEGIN_ATOMIC;
+  public static final int IOERR_COMMIT_ATOMIC = CApi.SQLITE_IOERR_COMMIT_ATOMIC;
+  public static final int IOERR_ROLLBACK_ATOMIC = CApi.SQLITE_IOERR_ROLLBACK_ATOMIC;
+  public static final int IOERR_DATA = CApi.SQLITE_IOERR_DATA;
+  public static final int IOERR_CORRUPTFS = CApi.SQLITE_IOERR_CORRUPTFS;
+  public static final int LOCKED_SHAREDCACHE = CApi.SQLITE_LOCKED_SHAREDCACHE;
+  public static final int LOCKED_VTAB = CApi.SQLITE_LOCKED_VTAB;
+  public static final int BUSY_RECOVERY = CApi.SQLITE_BUSY_RECOVERY;
+  public static final int BUSY_SNAPSHOT = CApi.SQLITE_BUSY_SNAPSHOT;
+  public static final int BUSY_TIMEOUT = CApi.SQLITE_BUSY_TIMEOUT;
+  public static final int CANTOPEN_NOTEMPDIR = CApi.SQLITE_CANTOPEN_NOTEMPDIR;
+  public static final int CANTOPEN_ISDIR = CApi.SQLITE_CANTOPEN_ISDIR;
+  public static final int CANTOPEN_FULLPATH = CApi.SQLITE_CANTOPEN_FULLPATH;
+  public static final int CANTOPEN_CONVPATH = CApi.SQLITE_CANTOPEN_CONVPATH;
+  public static final int CANTOPEN_SYMLINK = CApi.SQLITE_CANTOPEN_SYMLINK;
+  public static final int CORRUPT_VTAB = CApi.SQLITE_CORRUPT_VTAB;
+  public static final int CORRUPT_SEQUENCE = CApi.SQLITE_CORRUPT_SEQUENCE;
+  public static final int CORRUPT_INDEX = CApi.SQLITE_CORRUPT_INDEX;
+  public static final int READONLY_RECOVERY = CApi.SQLITE_READONLY_RECOVERY;
+  public static final int READONLY_CANTLOCK = CApi.SQLITE_READONLY_CANTLOCK;
+  public static final int READONLY_ROLLBACK = CApi.SQLITE_READONLY_ROLLBACK;
+  public static final int READONLY_DBMOVED = CApi.SQLITE_READONLY_DBMOVED;
+  public static final int READONLY_CANTINIT = CApi.SQLITE_READONLY_CANTINIT;
+  public static final int READONLY_DIRECTORY = CApi.SQLITE_READONLY_DIRECTORY;
+  public static final int ABORT_ROLLBACK = CApi.SQLITE_ABORT_ROLLBACK;
+  public static final int CONSTRAINT_CHECK = CApi.SQLITE_CONSTRAINT_CHECK;
+  public static final int CONSTRAINT_COMMITHOOK = CApi.SQLITE_CONSTRAINT_COMMITHOOK;
+  public static final int CONSTRAINT_FOREIGNKEY = CApi.SQLITE_CONSTRAINT_FOREIGNKEY;
+  public static final int CONSTRAINT_FUNCTION = CApi.SQLITE_CONSTRAINT_FUNCTION;
+  public static final int CONSTRAINT_NOTNULL = CApi.SQLITE_CONSTRAINT_NOTNULL;
+  public static final int CONSTRAINT_PRIMARYKEY = CApi.SQLITE_CONSTRAINT_PRIMARYKEY;
+  public static final int CONSTRAINT_TRIGGER = CApi.SQLITE_CONSTRAINT_TRIGGER;
+  public static final int CONSTRAINT_UNIQUE = CApi.SQLITE_CONSTRAINT_UNIQUE;
+  public static final int CONSTRAINT_VTAB = CApi.SQLITE_CONSTRAINT_VTAB;
+  public static final int CONSTRAINT_ROWID = CApi.SQLITE_CONSTRAINT_ROWID;
+  public static final int CONSTRAINT_PINNED = CApi.SQLITE_CONSTRAINT_PINNED;
+  public static final int CONSTRAINT_DATATYPE = CApi.SQLITE_CONSTRAINT_DATATYPE;
+  public static final int NOTICE_RECOVER_WAL = CApi.SQLITE_NOTICE_RECOVER_WAL;
+  public static final int NOTICE_RECOVER_ROLLBACK = CApi.SQLITE_NOTICE_RECOVER_ROLLBACK;
+  public static final int WARNING_AUTOINDEX = CApi.SQLITE_WARNING_AUTOINDEX;
+  public static final int AUTH_USER = CApi.SQLITE_AUTH_USER;
+  public static final int OK_LOAD_PERMANENTLY = CApi.SQLITE_OK_LOAD_PERMANENTLY;
+
   public static final int OPEN_READWRITE = CApi.SQLITE_OPEN_READWRITE;
   public static final int OPEN_CREATE = CApi.SQLITE_OPEN_CREATE;
   public static final int OPEN_EXRESCODE = CApi.SQLITE_OPEN_EXRESCODE;
+
   public static final int TXN_NONE = CApi.SQLITE_TXN_NONE;
   public static final int TXN_READ = CApi.SQLITE_TXN_READ;
   public static final int TXN_WRITE = CApi.SQLITE_TXN_WRITE;
@@ -72,7 +179,6 @@ public final class Sqlite implements AutoCloseable  {
   public static final int LIMIT_WORKER_THREADS = CApi.SQLITE_LIMIT_WORKER_THREADS;
 
   public static final int PREPARE_PERSISTENT = CApi.SQLITE_PREPARE_PERSISTENT;
-  public static final int PREPARE_NORMALIZE = CApi.SQLITE_PREPARE_NORMALIZE;
   public static final int PREPARE_NO_VTAB = CApi.SQLITE_PREPARE_NO_VTAB;
 
   public static final int TRACE_STMT = CApi.SQLITE_TRACE_STMT;
@@ -99,6 +205,49 @@ public final class Sqlite implements AutoCloseable  {
   public static final int DBCONFIG_TRUSTED_SCHEMA = CApi.SQLITE_DBCONFIG_TRUSTED_SCHEMA;
   public static final int DBCONFIG_STMT_SCANSTATUS = CApi.SQLITE_DBCONFIG_STMT_SCANSTATUS;
   public static final int DBCONFIG_REVERSE_SCANORDER = CApi.SQLITE_DBCONFIG_REVERSE_SCANORDER;
+
+  public static final int UTF8 = CApi.SQLITE_UTF8;
+  public static final int UTF16 = CApi.SQLITE_UTF16;
+  public static final int UTF16LE = CApi.SQLITE_UTF16LE;
+  public static final int UTF16BE = CApi.SQLITE_UTF16BE;
+  /* We elide the UTF16_ALIGNED from this interface because it
+     is irrelevant for the Java interface. */
+
+  public static final int DENY = CApi.SQLITE_DENY;
+  public static final int IGNORE = CApi.SQLITE_IGNORE;
+  public static final int CREATE_INDEX = CApi.SQLITE_CREATE_INDEX;
+  public static final int CREATE_TABLE = CApi.SQLITE_CREATE_TABLE;
+  public static final int CREATE_TEMP_INDEX = CApi.SQLITE_CREATE_TEMP_INDEX;
+  public static final int CREATE_TEMP_TABLE = CApi.SQLITE_CREATE_TEMP_TABLE;
+  public static final int CREATE_TEMP_TRIGGER = CApi.SQLITE_CREATE_TEMP_TRIGGER;
+  public static final int CREATE_TEMP_VIEW = CApi.SQLITE_CREATE_TEMP_VIEW;
+  public static final int CREATE_TRIGGER = CApi.SQLITE_CREATE_TRIGGER;
+  public static final int CREATE_VIEW = CApi.SQLITE_CREATE_VIEW;
+  public static final int DELETE = CApi.SQLITE_DELETE;
+  public static final int DROP_INDEX = CApi.SQLITE_DROP_INDEX;
+  public static final int DROP_TABLE = CApi.SQLITE_DROP_TABLE;
+  public static final int DROP_TEMP_INDEX = CApi.SQLITE_DROP_TEMP_INDEX;
+  public static final int DROP_TEMP_TABLE = CApi.SQLITE_DROP_TEMP_TABLE;
+  public static final int DROP_TEMP_TRIGGER = CApi.SQLITE_DROP_TEMP_TRIGGER;
+  public static final int DROP_TEMP_VIEW = CApi.SQLITE_DROP_TEMP_VIEW;
+  public static final int DROP_TRIGGER = CApi.SQLITE_DROP_TRIGGER;
+  public static final int DROP_VIEW = CApi.SQLITE_DROP_VIEW;
+  public static final int INSERT = CApi.SQLITE_INSERT;
+  public static final int PRAGMA = CApi.SQLITE_PRAGMA;
+  public static final int READ = CApi.SQLITE_READ;
+  public static final int SELECT = CApi.SQLITE_SELECT;
+  public static final int TRANSACTION = CApi.SQLITE_TRANSACTION;
+  public static final int UPDATE = CApi.SQLITE_UPDATE;
+  public static final int ATTACH = CApi.SQLITE_ATTACH;
+  public static final int DETACH = CApi.SQLITE_DETACH;
+  public static final int ALTER_TABLE = CApi.SQLITE_ALTER_TABLE;
+  public static final int REINDEX = CApi.SQLITE_REINDEX;
+  public static final int ANALYZE = CApi.SQLITE_ANALYZE;
+  public static final int CREATE_VTABLE = CApi.SQLITE_CREATE_VTABLE;
+  public static final int DROP_VTABLE = CApi.SQLITE_DROP_VTABLE;
+  public static final int FUNCTION = CApi.SQLITE_FUNCTION;
+  public static final int SAVEPOINT = CApi.SQLITE_SAVEPOINT;
+  public static final int RECURSIVE = CApi.SQLITE_RECURSIVE;
 
   //! Used only by the open() factory functions.
   private Sqlite(sqlite3 db){
@@ -129,7 +278,7 @@ public final class Sqlite implements AutoCloseable  {
   */
   public static Sqlite open(String filename, int flags, String vfsName){
     final OutputPointer.sqlite3 out = new OutputPointer.sqlite3();
-    final int rc = sqlite3_open_v2(filename, out, flags, vfsName);
+    final int rc = CApi.sqlite3_open_v2(filename, out, flags, vfsName);
     final sqlite3 n = out.take();
     if( 0!=rc ){
       if( null==n ) throw new SqliteException(rc);
@@ -137,10 +286,11 @@ public final class Sqlite implements AutoCloseable  {
       n.close();
       throw ex;
     }
-    Sqlite rv = new Sqlite(n);
+    final Sqlite rv = new Sqlite(n);
     synchronized(nativeToWrapper){
       nativeToWrapper.put(n, rv);
     }
+    runAutoExtensions(rv);
     return rv;
   }
 
@@ -149,7 +299,7 @@ public final class Sqlite implements AutoCloseable  {
   }
 
   public static Sqlite open(String filename){
-    return open(filename, SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE, null);
+    return open(filename, OPEN_READWRITE|OPEN_CREATE, null);
   }
 
   public static String libVersion(){
@@ -162,61 +312,6 @@ public final class Sqlite implements AutoCloseable  {
 
   public static String libSourceId(){
     return CApi.sqlite3_sourceid();
-  }
-
-
-  /**
-     Output object for use with status() and libStatus().
-  */
-  public static final class Status {
-    /** The current value for the requested status() or libStatus() metric. */
-    long current;
-    /** The peak value for the requested status() or libStatus() metric. */
-    long peak;
-  };
-
-  /**
-     As per sqlite3_status64(), but returns its current and high-water
-     results as a Status object. Throws if the first argument is
-     not one of the STATUS_... constants.
-  */
-  public static Status libStatus(int op, boolean resetStats){
-    org.sqlite.jni.capi.OutputPointer.Int64 pCurrent =
-      new org.sqlite.jni.capi.OutputPointer.Int64();
-    org.sqlite.jni.capi.OutputPointer.Int64 pHighwater =
-      new org.sqlite.jni.capi.OutputPointer.Int64();
-    checkRc2( CApi.sqlite3_status64(op, pCurrent, pHighwater, resetStats) );
-    final Status s = new Status();
-    s.current = pCurrent.value;
-    s.peak = pHighwater.value;
-    return s;
-  }
-
-  /**
-     As per sqlite3_status64(), but returns its current and high-water
-     results as a Status object. Throws if the first argument is
-     not one of the DBSTATUS_... constants or on any other misuse.
-  */
-  public Status status(int op, boolean resetStats){
-    org.sqlite.jni.capi.OutputPointer.Int32 pCurrent =
-      new org.sqlite.jni.capi.OutputPointer.Int32();
-    org.sqlite.jni.capi.OutputPointer.Int32 pHighwater =
-      new org.sqlite.jni.capi.OutputPointer.Int32();
-    checkRc( CApi.sqlite3_db_status(thisDb(), op, pCurrent, pHighwater, resetStats) );
-    final Status s = new Status();
-    s.current = pCurrent.value;
-    s.peak = pHighwater.value;
-    return s;
-  }
-
-  @Override public void close(){
-    if(null!=this.db){
-      synchronized(nativeToWrapper){
-        nativeToWrapper.remove(this.db);
-      }
-      this.db.close();
-      this.db = null;
-    }
   }
 
   /**
@@ -239,6 +334,22 @@ public final class Sqlite implements AutoCloseable  {
   */
   public static boolean compileOptionUsed(String optName){
     return CApi.sqlite3_compileoption_used(optName);
+  }
+
+  private static boolean hasNormalizeSql =
+    compileOptionUsed("ENABLE_NORMALIZE");
+
+  /**
+     Throws UnsupportedOperationException if check is false.
+     flag is expected to be the name of an SQLITE_ENABLE_...
+     build flag.
+  */
+  private static void checkSupported(boolean check, String flag){
+    if( !check ){
+      throw new UnsupportedOperationException(
+        "Library was built without "+flag
+      );
+    }
   }
 
   /**
@@ -277,6 +388,61 @@ public final class Sqlite implements AutoCloseable  {
   }
 
   /**
+     Output object for use with status() and libStatus().
+  */
+  public static final class Status {
+    /** The current value for the requested status() or libStatus() metric. */
+    long current;
+    /** The peak value for the requested status() or libStatus() metric. */
+    long peak;
+  };
+
+  /**
+     As per sqlite3_status64(), but returns its current and high-water
+     results as a Status object. Throws if the first argument is
+     not one of the STATUS_... constants.
+  */
+  public static Status libStatus(int op, boolean resetStats){
+    org.sqlite.jni.capi.OutputPointer.Int64 pCurrent =
+      new org.sqlite.jni.capi.OutputPointer.Int64();
+    org.sqlite.jni.capi.OutputPointer.Int64 pHighwater =
+      new org.sqlite.jni.capi.OutputPointer.Int64();
+    checkRc2( CApi.sqlite3_status64(op, pCurrent, pHighwater, resetStats) );
+    final Status s = new Status();
+    s.current = pCurrent.value;
+    s.peak = pHighwater.value;
+    return s;
+  }
+
+  /**
+     As per sqlite3_db_status(), but returns its current and
+     high-water results as a Status object. Throws if the first
+     argument is not one of the DBSTATUS_... constants or on any other
+     misuse.
+  */
+  public Status status(int op, boolean resetStats){
+    org.sqlite.jni.capi.OutputPointer.Int32 pCurrent =
+      new org.sqlite.jni.capi.OutputPointer.Int32();
+    org.sqlite.jni.capi.OutputPointer.Int32 pHighwater =
+      new org.sqlite.jni.capi.OutputPointer.Int32();
+    checkRc( CApi.sqlite3_db_status(thisDb(), op, pCurrent, pHighwater, resetStats) );
+    final Status s = new Status();
+    s.current = pCurrent.value;
+    s.peak = pHighwater.value;
+    return s;
+  }
+
+  @Override public void close(){
+    if(null!=this.db){
+      synchronized(nativeToWrapper){
+        nativeToWrapper.remove(this.db);
+      }
+      this.db.close();
+      this.db = null;
+    }
+  }
+
+  /**
      Returns this object's underlying native db handle, or null if
      this instance has been closed. This is very specifically not
      public.
@@ -308,7 +474,7 @@ public final class Sqlite implements AutoCloseable  {
     if( 0!=rc ){
       if( CApi.SQLITE_NOMEM==rc ){
         throw new OutOfMemoryError();
-      }else if( null==db || 0==sqlite3_errcode(db)){
+      }else if( null==db || 0==CApi.sqlite3_errcode(db) ){
         throw new SqliteException(rc);
       }else{
         throw new SqliteException(db);
@@ -331,6 +497,19 @@ public final class Sqlite implements AutoCloseable  {
   }
 
   /**
+     Toggles the use of extended result codes on or off. By default
+     they are turned off, but they can be enabled by default by
+     including the OPEN_EXRESCODE flag when opening a database.
+
+     Because this API reports db-side errors using exceptions,
+     enabling this may change the values returned by
+     SqliteException.errcode().
+  */
+  public void useExtendedResultCodes(boolean on){
+    checkRc( CApi.sqlite3_extended_result_codes(thisDb(), on) );
+  }
+
+  /**
      prepFlags must be 0 or a bitmask of the PREPARE_... constants.
 
      prepare() TODOs include:
@@ -343,7 +522,7 @@ public final class Sqlite implements AutoCloseable  {
   */
   public Stmt prepare(String sql, int prepFlags){
     final OutputPointer.sqlite3_stmt out = new OutputPointer.sqlite3_stmt();
-    final int rc = sqlite3_prepare_v3(thisDb(), sql, prepFlags, out);
+    final int rc = CApi.sqlite3_prepare_v3(thisDb(), sql, prepFlags, out);
     checkRc(rc);
     final sqlite3_stmt q = out.take();
     if( null==q ){
@@ -420,10 +599,6 @@ public final class Sqlite implements AutoCloseable  {
 
   public boolean isAutoCommit(){
     return CApi.sqlite3_get_autocommit(thisDb());
-  }
-
-  public void setBusyTimeout(int ms){
-    checkRc(CApi.sqlite3_busy_timeout(thisDb(), ms));
   }
 
   /**
@@ -724,7 +899,7 @@ public final class Sqlite implements AutoCloseable  {
         synchronized(nativeToWrapper){
           nativeToWrapper.remove(this.stmt);
         }
-        sqlite3_finalize(stmt);
+        CApi.sqlite3_finalize(stmt);
         stmt = null;
         _db = null;
         resultColCount = 0;
@@ -745,8 +920,8 @@ public final class Sqlite implements AutoCloseable  {
     private int checkRc(int rc){
       switch(rc){
         case 0:
-        case SQLITE_ROW:
-        case SQLITE_DONE: return rc;
+        case CApi.SQLITE_ROW:
+        case CApi.SQLITE_DONE: return rc;
         default:
           if( null==stmt ) throw new SqliteException(rc);
           else throw new SqliteException(this);
@@ -759,7 +934,7 @@ public final class Sqlite implements AutoCloseable  {
        result.
     */
     public boolean step(){
-      switch(checkRc(sqlite3_step(thisStmt()))){
+      switch(checkRc(CApi.sqlite3_step(thisStmt()))){
         case CApi.SQLITE_ROW: return true;
         case CApi.SQLITE_DONE: return false;
         default:
@@ -767,21 +942,13 @@ public final class Sqlite implements AutoCloseable  {
             "This \"cannot happen\": all possible result codes were checked already."
           );
       }
-      /*
-        Potential signature change TODO:
-
-        boolean step()
-
-        Returning true for SQLITE_ROW and false for anything else.
-        Those semantics have proven useful in the WASM/JS bindings.
-      */
     }
 
     /**
        Returns the Sqlite which prepared this statement, or null if
        this statement has been finalized.
     */
-    public Sqlite db(){ return this._db; }
+    public Sqlite getDb(){ return this._db; }
 
     /**
        Works like sqlite3_reset() but throws on error.
@@ -821,10 +988,12 @@ public final class Sqlite implements AutoCloseable  {
     }
 
     /**
-       Analog to sqlite3_normalized_sql(), returning null if the
-       library is built without the SQLITE_ENABLE_NORMALIZE flag.
+       Analog to sqlite3_normalized_sql(), but throws
+       UnsupportedOperationException if the library was built without
+       the SQLITE_ENABLE_NORMALIZE flag.
     */
     public String normalizedSql(){
+      Sqlite.checkSupported(hasNormalizeSql, "SQLITE_ENABLE_NORMALIZE");
       return CApi.sqlite3_normalized_sql(thisStmt());
     }
 
@@ -929,5 +1098,609 @@ public final class Sqlite implements AutoCloseable  {
       return CApi.sqlite3_column_table_name( checkColIndex(ndx), ndx );
     }
   } /* Stmt class */
+
+  /**
+     Interface for auto-extensions, as per the
+     sqlite3_auto_extension() API.
+
+     Design note: the chicken/egg timing of auto-extension execution
+     requires that this feature be entirely re-implemented in Java
+     because the C-level API has no access to the Sqlite type so
+     cannot pass on an object of that type while the database is being
+     opened.  One side effect of this reimplementation is that this
+     class's list of auto-extensions is 100% independent of the
+     C-level list so, e.g., clearAutoExtensions() will have no effect
+     on auto-extensions added via the C-level API and databases opened
+     from that level of API will not be passed to this level's
+     AutoExtension instances.
+  */
+  public interface AutoExtension {
+    public void call(Sqlite db);
+  }
+
+  private static final java.util.Set<AutoExtension> autoExtensions =
+    new java.util.LinkedHashSet<>();
+
+  /**
+     Passes db to all auto-extensions. If any one of them throws,
+     db.close() is called before the exception is propagated.
+  */
+  private static void runAutoExtensions(Sqlite db){
+    AutoExtension list[];
+    synchronized(autoExtensions){
+      /* Avoid that modifications to the AutoExtension list from within
+         auto-extensions affect this execution of this list. */
+      list = autoExtensions.toArray(new AutoExtension[0]);
+    }
+    try {
+      for( AutoExtension ax : list ) ax.call(db);
+    }catch(Exception e){
+      db.close();
+      throw e;
+    }
+  }
+
+  /**
+     Analog to sqlite3_auto_extension(), adds the given object to the
+     list of auto-extensions if it is not already in that list. The
+     given object will be run as part of Sqlite.open(), and passed the
+     being-opened database. If the extension throws then open() will
+     fail.
+
+     This API does not guaranty whether or not manipulations made to
+     the auto-extension list from within auto-extension callbacks will
+     affect the current traversal of the auto-extension list.  Whether
+     or not they do is unspecified and subject to change between
+     versions. e.g. if an AutoExtension calls addAutoExtension(),
+     whether or not the new extension will be run on the being-opened
+     database is undefined.
+
+     Note that calling Sqlite.open() from an auto-extension will
+     necessarily result in recursion loop and (eventually) a stack
+     overflow.
+  */
+  public static void addAutoExtension( AutoExtension e ){
+    if( null==e ){
+      throw new IllegalArgumentException("AutoExtension may not be null.");
+    }
+    synchronized(autoExtensions){
+      autoExtensions.add(e);
+    }
+  }
+
+  /**
+     Removes the given object from the auto-extension list if it is in
+     that list, otherwise this has no side-effects beyond briefly
+     locking that list.
+  */
+  public static void removeAutoExtension( AutoExtension e ){
+    synchronized(autoExtensions){
+      autoExtensions.remove(e);
+    }
+  }
+
+  /**
+     Removes all auto-extensions which were added via addAutoExtension().
+  */
+  public static void clearAutoExtensions(){
+    synchronized(autoExtensions){
+      autoExtensions.clear();
+    }
+  }
+
+  /**
+     Encapsulates state related to the sqlite3 backup API. Use
+     Sqlite.initBackup() to create new instances.
+  */
+  public static final class Backup implements AutoCloseable {
+    private sqlite3_backup b = null;
+    private Sqlite dbTo = null;
+    private Sqlite dbFrom = null;
+
+    Backup(Sqlite dbDest, String schemaDest,Sqlite dbSrc, String schemaSrc){
+      this.dbTo = dbDest;
+      this.dbFrom = dbSrc;
+      b = CApi.sqlite3_backup_init(dbDest.nativeHandle(), schemaDest,
+                                   dbSrc.nativeHandle(), schemaSrc);
+      if(null==b) toss();
+    }
+
+    private void toss(){
+      int rc = CApi.sqlite3_errcode(dbTo.nativeHandle());
+      if(0!=rc) throw new SqliteException(dbTo);
+      rc = CApi.sqlite3_errcode(dbFrom.nativeHandle());
+      if(0!=rc) throw new SqliteException(dbFrom);
+      throw new SqliteException(CApi.SQLITE_ERROR);
+    }
+
+    private sqlite3_backup getNative(){
+      if( null==b ) throw new IllegalStateException("This Backup is already closed.");
+      return b;
+    }
+    /**
+       If this backup is still active, this completes the backup and
+       frees its native resources, otherwise it this is a no-op.
+    */
+    public void finish(){
+      if( null!=b ){
+        CApi.sqlite3_backup_finish(b);
+        b = null;
+        dbTo = null;
+        dbFrom = null;
+      }
+    }
+
+    /** Equivalent to finish(). */
+    @Override public void close(){
+      this.finish();
+    }
+
+    /**
+       Analog to sqlite3_backup_step(). Returns 0 if stepping succeeds
+       or, Sqlite.DONE if the end is reached, Sqlite.BUSY if one of
+       the databases is busy, Sqlite.LOCKED if one of the databases is
+       locked, and throws for any other result code or if this object
+       has been closed. Note that BUSY and LOCKED are not necessarily
+       permanent errors, so do not trigger an exception.
+    */
+    public int step(int pageCount){
+      final int rc = CApi.sqlite3_backup_step(getNative(), pageCount);
+      switch(rc){
+        case 0:
+        case Sqlite.DONE:
+        case Sqlite.BUSY:
+        case Sqlite.LOCKED:
+          return rc;
+        default:
+          toss();
+          return CApi.SQLITE_ERROR/*not reached*/;
+      }
+    }
+
+    /**
+       Analog to sqlite3_backup_pagecount().
+    */
+    public int pageCount(){
+      return CApi.sqlite3_backup_pagecount(getNative());
+    }
+
+    /**
+       Analog to sqlite3_backup_remaining().
+    */
+    public int remaining(){
+      return CApi.sqlite3_backup_remaining(getNative());
+    }
+  }
+
+  /**
+     Analog to sqlite3_backup_init(). If schemaSrc is null, "main" is
+     assumed. Throws if either this db or dbSrc (the source db) are
+     not opened, if either of schemaDest or schemaSrc are null, or if
+     the underlying call to sqlite3_backup_init() fails.
+
+     The returned object must eventually be cleaned up by either
+     arranging for it to be auto-closed (e.g. using
+     try-with-resources) or by calling its finish() method.
+  */
+  public Backup initBackup(String schemaDest, Sqlite dbSrc, String schemaSrc){
+    thisDb();
+    dbSrc.thisDb();
+    if( null==schemaSrc || null==schemaDest ){
+      throw new IllegalArgumentException(
+        "Neither the source nor destination schema name may be null."
+      );
+    }
+    return new Backup(this, schemaDest, dbSrc, schemaSrc);
+  }
+
+
+  /**
+     Callback type for use with createCollation().
+   */
+  public interface Collation {
+    /**
+       Called by the SQLite core to compare inputs. Implementations
+       must compare its two arguments using memcmp(3) semantics.
+
+       Warning: the SQLite core has no mechanism for reporting errors
+       from custom collations and its workflow does not accommodate
+       propagation of exceptions from callbacks. Any exceptions thrown
+       from collations will be silently supressed and sorting results
+       will be unpredictable.
+    */
+    int call(byte[] lhs, byte[] rhs);
+  }
+
+  /**
+     Analog to sqlite3_create_collation().
+
+     Throws if name is null or empty, c is null, or the encoding flag
+     is invalid. The encoding must be one of the UTF8, UTF16, UTF16LE,
+     or UTF16BE constants.
+  */
+  public void createCollation(String name, int encoding, Collation c){
+    thisDb();
+    if( null==name || 0==name.length()){
+      throw new IllegalArgumentException("Collation name may not be null or empty.");
+    }
+    if( null==c ){
+      throw new IllegalArgumentException("Collation may not be null.");
+    }
+    switch(encoding){
+      case UTF8:
+      case UTF16:
+      case UTF16LE:
+      case UTF16BE:
+        break;
+      default:
+        throw new IllegalArgumentException("Invalid Collation encoding.");
+    }
+    checkRc(
+      CApi.sqlite3_create_collation(
+        thisDb(), name, encoding, new org.sqlite.jni.capi.CollationCallback(){
+            @Override public int call(byte[] lhs, byte[] rhs){
+              try{return c.call(lhs, rhs);}
+              catch(Exception e){return 0;}
+            }
+            @Override public void xDestroy(){}
+          }
+      )
+    );
+  }
+
+  /**
+     Callback for use with onCollationNeeded().
+  */
+  public interface CollationNeeded {
+    /**
+       Must behave as documented for the callback for
+       sqlite3_collation_needed().
+
+       Warning: the C API has no mechanism for reporting or
+       propagating errors from this callback, so any exceptions it
+       throws are suppressed.
+    */
+    void call(Sqlite db, int encoding, String collationName);
+  }
+
+  /**
+     Sets up the given object to be called by the SQLite core when it
+     encounters a collation name which it does not know. Pass a null
+     object to disconnect the object from the core. This replaces any
+     existing collation-needed loader, or is a no-op if the given
+     object is already registered. Throws if registering the loader
+     fails.
+  */
+  public void onCollationNeeded( CollationNeeded cn ){
+    org.sqlite.jni.capi.CollationNeededCallback cnc = null;
+    if( null!=cn ){
+      cnc = new org.sqlite.jni.capi.CollationNeededCallback(){
+          @Override public void call(sqlite3 db, int encoding, String collationName){
+            final Sqlite xdb = Sqlite.fromNative(db);
+            if(null!=xdb) cn.call(xdb, encoding, collationName);
+          }
+        };
+    }
+    checkRc( CApi.sqlite3_collation_needed(thisDb(), cnc) );
+  }
+
+  /**
+     Callback for use with busyHandler().
+  */
+  public interface BusyHandler {
+    /**
+       Must function as documented for the C-level
+       sqlite3_busy_handler() callback argument, minus the (void*)
+       argument the C-level function requires.
+
+       If this function throws, it is translated to a database-level
+       error.
+    */
+    int call(int n);
+  }
+
+  /**
+     Analog to sqlite3_busy_timeout().
+  */
+  public void setBusyTimeout(int ms){
+    checkRc(CApi.sqlite3_busy_timeout(thisDb(), ms));
+  }
+
+  /**
+     Analog to sqlite3_busy_handler(). If b is null then any
+     current handler is cleared.
+  */
+  public void setBusyHandler( BusyHandler b ){
+    org.sqlite.jni.capi.BusyHandlerCallback bhc = null;
+    if( null!=b ){
+      bhc = new org.sqlite.jni.capi.BusyHandlerCallback(){
+          @Override public int call(int n){
+            return b.call(n);
+          }
+        };
+    }
+    checkRc( CApi.sqlite3_busy_handler(thisDb(), bhc) );
+  }
+
+  public interface CommitHook {
+    /**
+       Must behave as documented for the C-level sqlite3_commit_hook()
+       callback. If it throws, the exception is translated into
+       a db-level error.
+    */
+    int call();
+  }
+
+  /**
+     A level of indirection to permit setCommitHook() to have similar
+     semantics as the C API, returning the previous hook. The caveat
+     is that if the low-level API is used to install a hook, it will
+     have a different hook type than Sqlite.CommitHook so
+     setCommitHook() will return null instead of that object.
+  */
+  private static class CommitHookProxy
+    implements org.sqlite.jni.capi.CommitHookCallback {
+    final CommitHook commitHook;
+    CommitHookProxy(CommitHook ch){
+      this.commitHook = ch;
+    }
+    @Override public int call(){
+      return commitHook.call();
+    }
+  }
+
+  /**
+     Analog to sqlite3_commit_hook(). Returns the previous hook, if
+     any (else null). Throws if this db is closed.
+
+     Minor caveat: if a commit hook is set on this object's underlying
+     db handle using the lower-level SQLite API, this function may
+     return null when replacing it, despite there being a hook,
+     because it will have a different callback type. So long as the
+     handle is only manipulated via the high-level API, this caveat
+     does not apply.
+  */
+  public CommitHook setCommitHook( CommitHook c ){
+    CommitHookProxy chp = null;
+    if( null!=c ){
+      chp = new CommitHookProxy(c);
+    }
+    final org.sqlite.jni.capi.CommitHookCallback rv =
+      CApi.sqlite3_commit_hook(thisDb(), chp);
+    return (rv instanceof CommitHookProxy)
+      ? ((CommitHookProxy)rv).commitHook
+      : null;
+  }
+
+
+  public interface RollbackHook {
+    /**
+       Must behave as documented for the C-level sqlite3_rollback_hook()
+       callback. If it throws, the exception is translated into
+       a db-level error.
+    */
+    void call();
+  }
+
+  /**
+     A level of indirection to permit setRollbackHook() to have similar
+     semantics as the C API, returning the previous hook. The caveat
+     is that if the low-level API is used to install a hook, it will
+     have a different hook type than Sqlite.RollbackHook so
+     setRollbackHook() will return null instead of that object.
+  */
+  private static class RollbackHookProxy
+    implements org.sqlite.jni.capi.RollbackHookCallback {
+    final RollbackHook rollbackHook;
+    RollbackHookProxy(RollbackHook ch){
+      this.rollbackHook = ch;
+    }
+    @Override public void call(){rollbackHook.call();}
+  }
+
+  /**
+     Analog to sqlite3_rollback_hook(). Returns the previous hook, if
+     any (else null). Throws if this db is closed.
+
+     Minor caveat: if a rollback hook is set on this object's underlying
+     db handle using the lower-level SQLite API, this function may
+     return null when replacing it, despite there being a hook,
+     because it will have a different callback type. So long as the
+     handle is only manipulated via the high-level API, this caveat
+     does not apply.
+  */
+  public RollbackHook setRollbackHook( RollbackHook c ){
+    RollbackHookProxy chp = null;
+    if( null!=c ){
+      chp = new RollbackHookProxy(c);
+    }
+    final org.sqlite.jni.capi.RollbackHookCallback rv =
+      CApi.sqlite3_rollback_hook(thisDb(), chp);
+    return (rv instanceof RollbackHookProxy)
+      ? ((RollbackHookProxy)rv).rollbackHook
+      : null;
+  }
+
+  public interface UpdateHook {
+    /**
+       Must function as described for the C-level sqlite3_update_hook()
+       callback.
+    */
+    void call(int opId, String dbName, String tableName, long rowId);
+  }
+
+  /**
+     A level of indirection to permit setUpdateHook() to have similar
+     semantics as the C API, returning the previous hook. The caveat
+     is that if the low-level API is used to install a hook, it will
+     have a different hook type than Sqlite.UpdateHook so
+     setUpdateHook() will return null instead of that object.
+  */
+  private static class UpdateHookProxy
+    implements org.sqlite.jni.capi.UpdateHookCallback {
+    final UpdateHook updateHook;
+    UpdateHookProxy(UpdateHook ch){
+      this.updateHook = ch;
+    }
+    @Override public void call(int opId, String dbName, String tableName, long rowId){
+      updateHook.call(opId, dbName, tableName, rowId);
+    }
+  }
+
+  /**
+     Analog to sqlite3_update_hook(). Returns the previous hook, if
+     any (else null). Throws if this db is closed.
+
+     Minor caveat: if a update hook is set on this object's underlying
+     db handle using the lower-level SQLite API, this function may
+     return null when replacing it, despite there being a hook,
+     because it will have a different callback type. So long as the
+     handle is only manipulated via the high-level API, this caveat
+     does not apply.
+  */
+  public UpdateHook setUpdateHook( UpdateHook c ){
+    UpdateHookProxy chp = null;
+    if( null!=c ){
+      chp = new UpdateHookProxy(c);
+    }
+    final org.sqlite.jni.capi.UpdateHookCallback rv =
+      CApi.sqlite3_update_hook(thisDb(), chp);
+    return (rv instanceof UpdateHookProxy)
+      ? ((UpdateHookProxy)rv).updateHook
+      : null;
+  }
+
+
+  /**
+     Callback interface for use with setProgressHandler().
+  */
+  public interface ProgressHandler {
+    /**
+       Must behave as documented for the C-level sqlite3_progress_handler()
+       callback. If it throws, the exception is translated into
+       a db-level error.
+    */
+    int call();
+  }
+
+  /**
+     Analog to sqlite3_progress_handler(), sets the current progress
+     handler or clears it if p is null.
+
+     Note that this API, in contrast to setUpdateHook(),
+     setRollbackHook(), and setCommitHook(), cannot return the
+     previous handler. That inconsistency is part of the lower-level C
+     API.
+  */
+  public void setProgressHandler( int n, ProgressHandler p ){
+    org.sqlite.jni.capi.ProgressHandlerCallback phc = null;
+    if( null!=p ){
+      phc = new org.sqlite.jni.capi.ProgressHandlerCallback(){
+          @Override public int call(){ return p.call(); }
+        };
+    }
+    CApi.sqlite3_progress_handler( thisDb(), n, phc );
+  }
+
+
+  /**
+     Callback for use with setAuthorizer().
+  */
+  public interface Authorizer {
+    /**
+       Must function as described for the C-level
+       sqlite3_set_authorizer() callback. If it throws, the error is
+       converted to a db-level error and the exception is suppressed.
+    */
+    int call(int opId, String s1, String s2, String s3, String s4);
+  }
+
+  /**
+     Analog to sqlite3_set_authorizer(), this sets the current
+     authorizer callback, or clears if it passed null.
+  */
+  public void setAuthorizer( Authorizer a ) {
+    org.sqlite.jni.capi.AuthorizerCallback ac = null;
+    if( null!=a ){
+      ac = new org.sqlite.jni.capi.AuthorizerCallback(){
+          @Override public int call(int opId, String s1, String s2, String s3, String s4){
+            return a.call(opId, s1, s2, s3, s4);
+          }
+        };
+    }
+    checkRc( CApi.sqlite3_set_authorizer( thisDb(), ac ) );
+  }
+
+  /**
+     Object type for use with blobOpen()
+  */
+  public final class Blob implements AutoCloseable {
+    private Sqlite db;
+    private sqlite3_blob b;
+    Blob(Sqlite db, sqlite3_blob b){
+      this.db = db;
+      this.b = b;
+    }
+
+    /**
+       Analog to sqlite3_blob_close().
+    */
+    @Override public void close(){
+      if( null!=b ){
+        CApi.sqlite3_blob_close(b);
+        b = null;
+        db = null;
+      }
+    }
+
+    /**
+       Analog to sqlite3_blob_reopen() but throws on error.
+    */
+    public void reopen(long newRowId){
+      db.checkRc( CApi.sqlite3_blob_reopen(b, newRowId) );
+    }
+
+    /**
+       Analog to sqlite3_blob_write() but throws on error.
+    */
+    public void write( byte[] bytes, int atOffset ){
+      db.checkRc( CApi.sqlite3_blob_write(b, bytes, atOffset) );
+    }
+
+    /**
+       Analog to sqlite3_blob_read() but throws on error.
+    */
+    public void read( byte[] dest, int atOffset ){
+      db.checkRc( CApi.sqlite3_blob_read(b, dest, atOffset) );
+    }
+
+    /**
+       Analog to sqlite3_blob_bytes().
+    */
+    public int bytes(){
+      return CApi.sqlite3_blob_bytes(b);
+    }
+  }
+
+  /**
+     Analog to sqlite3_blob_open(). Returns a Blob object for the
+     given database, table, column, and rowid. The blob is opened for
+     read-write mode if writeable is true, else it is read-only.
+
+     The returned object must eventually be freed, before this
+     database is closed, by either arranging for it to be auto-closed
+     or calling its close() method.
+
+     Throws on error.
+  */
+  public Blob blobOpen(String dbName, String tableName, String columnName,
+                       long iRow, boolean writeable){
+    final OutputPointer.sqlite3_blob out = new OutputPointer.sqlite3_blob();
+    checkRc(
+      CApi.sqlite3_blob_open(thisDb(), dbName, tableName, columnName,
+                             iRow, writeable ? 1 : 0, out)
+    );
+    return new Blob(this, out.take());
+  }
 
 }
