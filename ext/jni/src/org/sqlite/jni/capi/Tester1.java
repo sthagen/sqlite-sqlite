@@ -382,6 +382,15 @@ public class Tester1 implements Runnable {
     stmt = prepare(db, "SELECT a FROM t ORDER BY a DESC;");
     affirm( sqlite3_stmt_readonly(stmt) );
     affirm( !sqlite3_stmt_busy(stmt) );
+    if( sqlite3_compileoption_used("ENABLE_COLUMN_METADATA") ){
+      /* Unlike in native C code, JNI won't trigger an
+         UnsatisfiedLinkError until these are called (on Linux, at
+         least). */
+      affirm("t".equals(sqlite3_column_table_name(stmt,0)));
+      affirm("main".equals(sqlite3_column_database_name(stmt,0)));
+      affirm("a".equals(sqlite3_column_origin_name(stmt,0)));
+    }
+
     int total2 = 0;
     while( SQLITE_ROW == sqlite3_step(stmt) ){
       affirm( sqlite3_stmt_busy(stmt) );
@@ -1911,6 +1920,7 @@ public class Tester1 implements Runnable {
           sqlite3_libversion_number(),"\n",
           sqlite3_libversion(),"\n",SQLITE_SOURCE_ID,"\n",
           "SQLITE_THREADSAFE=",sqlite3_threadsafe());
+    outln("JVM NIO support? ",sqlite3_jni_supports_nio() ? "YES" : "NO");
     final boolean showLoopCount = (nRepeat>1 && nThread>1);
     if( showLoopCount ){
       outln("Running ",nRepeat," loop(s) with ",nThread," thread(s) each.");
