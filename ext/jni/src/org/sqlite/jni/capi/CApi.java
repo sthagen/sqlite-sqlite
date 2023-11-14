@@ -215,7 +215,7 @@ public final class CApi {
      If n is negative, SQLITE_MISUSE is returned. If n>data.length
      then n is silently truncated to data.length.
   */
-  static int sqlite3_bind_blob(
+  public static int sqlite3_bind_blob(
     @NotNull sqlite3_stmt stmt, int ndx, @Nullable byte[] data, int n
   ){
     return sqlite3_bind_blob(stmt.getNativePointer(), ndx, data, n);
@@ -227,6 +227,28 @@ public final class CApi {
     return (null==data)
       ? sqlite3_bind_null(stmt.getNativePointer(), ndx)
       : sqlite3_bind_blob(stmt.getNativePointer(), ndx, data, data.length);
+  }
+
+  /**
+     Convenience overload which is a simple proxy for
+     sqlite3_bind_nio_buffer().
+  */
+  public static int sqlite3_bind_blob(
+    @NotNull sqlite3_stmt stmt, int ndx, @Nullable java.nio.ByteBuffer data,
+    int begin, int n
+  ){
+    return sqlite3_bind_nio_buffer(stmt, ndx, data, begin, n);
+  }
+
+  /**
+     Convenience overload which is equivalant to passing its arguments
+     to sqlite3_bind_nio_buffer() with the values 0 and -1 for the
+     final two arguments.
+  */
+  public static int sqlite3_bind_blob(
+    @NotNull sqlite3_stmt stmt, int ndx, @Nullable java.nio.ByteBuffer data
+  ){
+    return sqlite3_bind_nio_buffer(stmt, ndx, data, 0, -1);
   }
 
   private static native int sqlite3_bind_double(
@@ -260,6 +282,57 @@ public final class CApi {
   private static native int sqlite3_bind_java_object(
     @NotNull long ptrToStmt, int ndx, @Nullable Object o
   );
+
+  /**
+     Binds the contents of the given buffer object as a blob.
+
+     The byte range of the buffer may be restricted by providing a
+     start index and a number of bytes. beginPos may not be negative
+     but a negative howMany is interpretated as the remainder of the
+     buffer past the given start position.
+
+     If beginPos+howMany would extend past the end of the buffer, the
+     range is silently truncated to fit the buffer.
+
+     If any of the following are true, this function behaves like
+     sqlite3_bind_null(): the buffer is null, beginPos is at or past
+     the end of the buffer, howMany is 0, or the calculated slice of
+     the blob has a length of 0.
+
+     If ndx is out of range, it returns SQLITE_RANGE, as documented
+     for sqlite3_bind_blob().  If beginPos is negative or if
+     sqlite3_jni_supports_nio() returns false then SQLITE_MISUSE is
+     returned.  Note that this function is bound (as it were) by the
+     SQLITE_LIMIT_LENGTH constraint and SQLITE_TOOBIG is returned if
+     the resulting slice of the buffer exceeds that limit.
+
+     This function does not modify the buffer's streaming-related
+     cursors.
+
+     If the buffer is modified in a separate thread while this
+     operation is running, results are undefined and will likely
+     result in corruption of the bound data or a segmentation fault.
+
+     Design note: this function should arguably take a java.nio.Buffer
+     instead of ByteBuffer, but it can only operate on "direct"
+     buffers and the only such class offered by Java is (apparently)
+     ByteBuffer.
+
+     @see https://docs.oracle.com/javase/8/docs/api/java/nio/Buffer.html
+  */
+  public static native int sqlite3_bind_nio_buffer(
+    @NotNull sqlite3_stmt stmt, int ndx, @Nullable java.nio.ByteBuffer data,
+    int beginPos, int howMany
+  );
+
+  /**
+     Convenience overload which binds the given buffer's entire contents.
+  */
+  public static int sqlite3_bind_nio_buffer(
+    @NotNull sqlite3_stmt stmt, int ndx, @Nullable java.nio.ByteBuffer data
+  ){
+    return sqlite3_bind_nio_buffer(stmt, ndx, data, 0, -1);
+  }
 
   /**
      Binds the given object at the given index. If o is null then this behaves like
@@ -569,6 +642,15 @@ public final class CApi {
     return sqlite3_column_count(stmt.getNativePointer());
   }
 
+  private static native String sqlite3_column_database_name(@NotNull long ptrToStmt, int ndx);
+
+  /**
+     Only available if built with SQLITE_ENABLE_COLUMN_METADATA.
+  */
+  public static String sqlite3_column_database_name(@NotNull sqlite3_stmt stmt, int ndx){
+    return sqlite3_column_database_name(stmt.getNativePointer(), ndx);
+  }
+
   private static native String sqlite3_column_decltype(@NotNull long ptrToStmt, int ndx);
 
   public static String sqlite3_column_decltype(@NotNull sqlite3_stmt stmt, int ndx){
@@ -623,14 +705,15 @@ public final class CApi {
     return sqlite3_column_name(stmt.getNativePointer(), ndx);
   }
 
-  private static native String sqlite3_column_database_name(@NotNull long ptrToStmt, int ndx);
-
   /**
-     Only available if built with SQLITE_ENABLE_COLUMN_METADATA.
+     A variant of sqlite3_column_blob() which returns the blob as a
+     ByteBuffer object. Returns null if its argument is null, if
+     sqlite3_jni_supports_nio() is false, or if sqlite3_column_blob()
+     would return null for the same inputs.
   */
-  public static String sqlite3_column_database_name(@NotNull sqlite3_stmt stmt, int ndx){
-    return sqlite3_column_database_name(stmt.getNativePointer(), ndx);
-  }
+  public static native java.nio.ByteBuffer sqlite3_column_nio_buffer(
+    @NotNull sqlite3_stmt stmt, int ndx
+  );
 
   private static native String sqlite3_column_origin_name(@NotNull long ptrToStmt, int ndx);
 
@@ -1341,6 +1424,15 @@ public final class CApi {
      If the C API was built with SQLITE_ENABLE_PREUPDATE_HOOK defined,
      this acts as a proxy for C's sqlite3_preupdate_new(), else it
      returns SQLITE_MISUSE with no side effects.
+
+     WARNING: client code _must not_ hold a reference to the returned
+     sqlite3_value object beyond the scope of the preupdate hook in
+     which this function is called. Doing so will leave the client
+     holding a stale pointer, the address of which could point to
+     anything at all after the pre-update hook is complete. This API
+     has no way to record such objects and clear/invalidate them at
+     the end of a pre-update hook. We "could" add infrastructure to do
+     so, but would require significant levels of bookkeeping.
   */
   public static int sqlite3_preupdate_new(@NotNull sqlite3 db, int col,
                                           @NotNull OutputPointer.sqlite3_value out){
@@ -1364,6 +1456,9 @@ public final class CApi {
      If the C API was built with SQLITE_ENABLE_PREUPDATE_HOOK defined,
      this acts as a proxy for C's sqlite3_preupdate_old(), else it
      returns SQLITE_MISUSE with no side effects.
+
+     WARNING: see warning in sqlite3_preupdate_new() regarding the
+     potential for stale sqlite3_value handles.
   */
   public static int sqlite3_preupdate_old(@NotNull sqlite3 db, int col,
                                           @NotNull OutputPointer.sqlite3_value out){
@@ -1487,6 +1582,39 @@ public final class CApi {
     @NotNull sqlite3_context cx, @NotNull Object o
   );
 
+  /**
+     Similar to sqlite3_bind_nio_buffer(), this works like
+     sqlite3_result_blob() but accepts a java.nio.ByteBuffer as its
+     input source. See sqlite3_bind_nio_buffer() for the semantics of
+     the second and subsequent arguments.
+
+     If cx is null then this function will silently fail. If
+     sqlite3_jni_supports_nio() returns false or iBegin is negative,
+     an error result is set. If (begin+n) extends beyond the end of
+     the buffer, it is silently truncated to fit.
+
+     If any of the following apply, this function behaves like
+     sqlite3_result_null(): the blob is null, the resulting slice of
+     the blob is empty.
+
+     If the resulting slice of the buffer exceeds SQLITE_LIMIT_LENGTH
+     then this function behaves like sqlite3_result_error_toobig().
+  */
+  public static native void sqlite3_result_nio_buffer(
+    @NotNull sqlite3_context cx, @Nullable java.nio.ByteBuffer blob,
+    int begin, int n
+  );
+
+  /**
+     Convenience overload which uses the whole input object
+     as the result blob content.
+  */
+  public static void sqlite3_result_nio_buffer(
+    @NotNull sqlite3_context cx, @Nullable java.nio.ByteBuffer blob
+  ){
+    sqlite3_result_nio_buffer(cx, blob, 0, -1);
+  }
+
   public static native void sqlite3_result_null(
     @NotNull sqlite3_context cx
   );
@@ -1579,6 +1707,27 @@ public final class CApi {
     @NotNull sqlite3_context cx, @Nullable byte[] blob
   ){
     sqlite3_result_blob(cx, blob, (int)(null==blob ? 0 : blob.length));
+  }
+
+  /**
+     Convenience overload which behaves like
+     sqlite3_result_nio_buffer().
+  */
+  public static void sqlite3_result_blob(
+    @NotNull sqlite3_context cx, @Nullable java.nio.ByteBuffer blob,
+    int begin, int n
+  ){
+    sqlite3_result_nio_buffer(cx, blob, begin, n);
+  }
+
+  /**
+     Convenience overload which behaves like the two-argument overload of
+     sqlite3_result_nio_buffer().
+  */
+  public static void sqlite3_result_blob(
+    @NotNull sqlite3_context cx, @Nullable java.nio.ByteBuffer blob
+  ){
+    sqlite3_result_nio_buffer(cx, blob);
   }
 
   /**
@@ -1978,6 +2127,16 @@ public final class CApi {
     final Object o = sqlite3_value_java_object(v);
     return type.isInstance(o) ? (T)o : null;
   }
+
+  /**
+     A variant of sqlite3_column_blob() which returns the blob as a
+     ByteBuffer object. Returns null if its argument is null, if
+     sqlite3_jni_supports_nio() is false, or if sqlite3_value_blob()
+     would return null for the same input.
+  */
+  public static native java.nio.ByteBuffer sqlite3_value_nio_buffer(
+    @NotNull sqlite3_value v
+  );
 
   private static native int sqlite3_value_nochange(@NotNull long ptrToValue);
 

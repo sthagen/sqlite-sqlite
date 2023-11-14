@@ -15,13 +15,14 @@
 
 /*
 ** If you found this comment by searching the code for
-** CallStaticObjectMethod then you're the victim of an OpenJDK bug:
+** CallStaticObjectMethod because it appears in console output then
+** you're probably the victim of an OpenJDK bug:
 **
 ** https://bugs.openjdk.org/browse/JDK-8130659
 **
-** It's known to happen with OpenJDK v8 but not with v19.
-**
-** This code does not use JNI's CallStaticObjectMethod().
+** It's known to happen with OpenJDK v8 but not with v19. It was
+** triggered by this code long before it made any use of
+** CallStaticObjectMethod().
 */
 
 /*
@@ -664,6 +665,7 @@ struct S3JniGlobalType {
       ByteBuffer is available (which we determine during static init).
     */
     jclass cByteBuffer       /* global ref to java.nio.ByteBuffer */;
+    jmethodID byteBufferAlloc/* ByteBuffer.allocateDirect() */;
   } g;
   /*
   ** The list of Java-side auto-extensions
@@ -871,6 +873,31 @@ static jbyte * s3jni__jbyteArray_bytes2(JNIEnv * const env, jbyteArray jBA, jsiz
   if( jBytes ) (*env)->ReleaseByteArrayElements(env, jByteArray, jBytes, JNI_COMMIT)
 
 /*
+** If jbb is-a java.nio.Buffer object and the JNI environment
+** supports it, *pBuf is set to the buffer's memory and *pN is set to
+** its length. If jbb is NULL, not a Buffer, or the JNI environment
+** does not support that operation, *pBuf is set to 0 and *pN is set
+** to 0.
+**
+** Note that the length of the buffer can be larger than SQLITE_LIMIT
+** but this function does not know what byte range of the buffer is
+** required so cannot check for that violation. The caller is required
+** to ensure that any to-be-bind()ed range fits within SQLITE_LIMIT.
+ */
+static void s3jni__get_nio_buffer(JNIEnv * const env, jobject jbb, void **pBuf, jint * pN ){
+  *pBuf = 0;
+  *pN = 0;
+  if( jbb ){
+    *pBuf = (*env)->GetDirectBufferAddress(env, jbb);
+    *pN = *pBuf ? (jint)(*env)->GetDirectBufferCapacity(env, jbb) : 0
+      /* why the Java limits the buffer length to int but the JNI API
+         uses a jlong for the length is a mystery. */;
+  }
+}
+#define s3jni_get_nio_buffer(JOBJ,vpOut,jpOut) \
+  s3jni__get_nio_buffer(env,(JOBJ),(vpOut),(jpOut))
+
+/*
 ** Returns the current JNIEnv object. Fails fatally if it cannot find
 ** the object.
 */
@@ -1067,6 +1094,47 @@ static jstring s3jni_text16_to_jstring(JNIEnv * const env, const void * const p,
   s3jni_oom_check( p ? !!rv : 1 );
   return rv;
 }
+
+/*
+** Creates a new ByteBuffer instance with a capacity of n. assert()s
+** that SJG.g.cByteBuffer is not 0 and n>0.
+*/
+static jobject s3jni__new_ByteBuffer(JNIEnv * const env, int n){
+  jobject rv = 0;
+  assert( SJG.g.cByteBuffer );
+  assert( SJG.g.byteBufferAlloc );
+  assert( n > 0 );
+  rv = (*env)->CallStaticObjectMethod(env, SJG.g.cByteBuffer,
+                                      SJG.g.byteBufferAlloc, (jint)n);
+  S3JniIfThrew {
+    S3JniExceptionReport;
+    S3JniExceptionClear;
+  }
+  s3jni_oom_check( rv );
+  return rv;
+}
+
+/*
+** If n>0 and sqlite3_jni_supports_nio() is true then this creates a
+** new ByteBuffer object and copies n bytes from p to it. Returns NULL
+** if n is 0, sqlite3_jni_supports_nio() is false, or on allocation
+** error (unless fatal alloc failures are enabled).
+*/
+static jobject s3jni__blob_to_ByteBuffer(JNIEnv * const env,
+                                         const void * p, int n){
+  jobject rv = NULL;
+  assert( n >= 0 );
+  if( 0==n || !SJG.g.cByteBuffer ){
+    return NULL;
+  }
+  rv = s3jni__new_ByteBuffer(env, n);
+  if( rv ){
+    void * tgt = (*env)->GetDirectBufferAddress(env, rv);
+    memcpy(tgt, p, (size_t)n);
+  }
+  return rv;
+}
+
 
 /*
 ** Requires jx to be a Throwable. Calls its toString() method and
@@ -1479,13 +1547,13 @@ static void * NativePointerHolder__get(JNIEnv * env, jobject jNph,
 ** argument is a Java sqlite3 object, as this operation only has void
 ** pointers to work with.
 */
-#define PtrGet_T(T,OBJ) (T*)NativePointerHolder_get(OBJ, S3JniNph(T))
-#define PtrGet_sqlite3(OBJ) PtrGet_T(sqlite3, OBJ)
-#define PtrGet_sqlite3_backup(OBJ) PtrGet_T(sqlite3_backup, OBJ)
-#define PtrGet_sqlite3_blob(OBJ) PtrGet_T(sqlite3_blob, OBJ)
-#define PtrGet_sqlite3_context(OBJ) PtrGet_T(sqlite3_context, OBJ)
-#define PtrGet_sqlite3_stmt(OBJ) PtrGet_T(sqlite3_stmt, OBJ)
-#define PtrGet_sqlite3_value(OBJ) PtrGet_T(sqlite3_value, OBJ)
+#define PtrGet_T(T,JOBJ) (T*)NativePointerHolder_get((JOBJ), S3JniNph(T))
+#define PtrGet_sqlite3(JOBJ) PtrGet_T(sqlite3, (JOBJ))
+#define PtrGet_sqlite3_backup(JOBJ) PtrGet_T(sqlite3_backup, (JOBJ))
+#define PtrGet_sqlite3_blob(JOBJ) PtrGet_T(sqlite3_blob, (JOBJ))
+#define PtrGet_sqlite3_context(JOBJ) PtrGet_T(sqlite3_context, (JOBJ))
+#define PtrGet_sqlite3_stmt(JOBJ) PtrGet_T(sqlite3_stmt, (JOBJ))
+#define PtrGet_sqlite3_value(JOBJ) PtrGet_T(sqlite3_value, (JOBJ))
 /*
 ** LongPtrGet_T(X,Y) expects X to be an unqualified sqlite3 struct
 ** type name and Y to be a native pointer to such an object in the
@@ -1505,12 +1573,12 @@ static void * NativePointerHolder__get(JNIEnv * env, jobject jNph,
 ** a difference of microseconds (i.e. below our testing measurement
 ** threshold) might add up.
 */
-#define LongPtrGet_T(T,JLongAsPtr) (T*)((intptr_t)(JLongAsPtr))
-#define LongPtrGet_sqlite3(JLongAsPtr) LongPtrGet_T(sqlite3,JLongAsPtr)
-#define LongPtrGet_sqlite3_backup(JLongAsPtr) LongPtrGet_T(sqlite3_backup,JLongAsPtr)
-#define LongPtrGet_sqlite3_blob(JLongAsPtr) LongPtrGet_T(sqlite3_blob,JLongAsPtr)
-#define LongPtrGet_sqlite3_stmt(JLongAsPtr) LongPtrGet_T(sqlite3_stmt,JLongAsPtr)
-#define LongPtrGet_sqlite3_value(JLongAsPtr) LongPtrGet_T(sqlite3_value,JLongAsPtr)
+#define LongPtrGet_T(T,JLongAsPtr) (T*)((intptr_t)((JLongAsPtr)))
+#define LongPtrGet_sqlite3(JLongAsPtr) LongPtrGet_T(sqlite3,(JLongAsPtr))
+#define LongPtrGet_sqlite3_backup(JLongAsPtr) LongPtrGet_T(sqlite3_backup,(JLongAsPtr))
+#define LongPtrGet_sqlite3_blob(JLongAsPtr) LongPtrGet_T(sqlite3_blob,(JLongAsPtr))
+#define LongPtrGet_sqlite3_stmt(JLongAsPtr) LongPtrGet_T(sqlite3_stmt,(JLongAsPtr))
+#define LongPtrGet_sqlite3_value(JLongAsPtr) LongPtrGet_T(sqlite3_value,(JLongAsPtr))
 /*
 ** Extracts the new S3JniDb instance from the free-list, or allocates
 ** one if needed, associates it with pDb, and returns.  Returns NULL
@@ -1911,7 +1979,7 @@ static void udf_unargs(JNIEnv *env, jobject jCx, int argc, jobjectArray jArgv){
   NativePointerHolder_set(S3JniNph(sqlite3_context), jCx, 0);
   for( ; i < argc; ++i ){
     jobject jsv = (*env)->GetObjectArrayElement(env, jArgv, i);
-    assert(jsv);
+    assert(jsv && "Someone illegally modified a UDF argument array.");
     NativePointerHolder_set(S3JniNph(sqlite3_value), jsv, 0);
   }
 }
@@ -2406,6 +2474,92 @@ S3JniApi(sqlite3_bind_blob(),jint,1bind_1blob)(
       : sqlite3_bind_null( LongPtrGet_sqlite3_stmt(jpStmt), ndx );
   }
   return (jint)rc;
+}
+
+/**
+   Helper for use with s3jni_setup_nio_args().
+*/
+struct S3JniNioArgs {
+  jobject jBuf;        /* input - ByteBuffer */
+  jint iBegin;         /* input - byte offset */
+  jint iN;             /* input - byte count to bind */
+  jint nBuf;           /* output - jBuf's buffer size */
+  void * p;            /* output - jBuf's buffer memory */
+  const void * pStart; /* output - offset of p to bind */
+  int iOutLen;         /* output - number of bytes from pStart to bind */
+};
+typedef struct S3JniNioArgs S3JniNioArgs;
+static const S3JniNioArgs S3JniNioArgs_empty = {
+  0,0,0,0,0,0,0
+};
+
+/**
+   Internal helper for sqlite3_bind_nio_buffer() and
+   sqlite3_result_nio_buffer(). Populates pArgs and returns 0 on
+   success, non-0 if the operation should fail. The caller is
+   required to check for SJG.g.cByteBuffer!=0 before calling
+   this and reporting it in a way appropriate for that routine.
+   This function may assert() that SJG.g.cByteBuffer is not 0.
+
+   The (jBuffer, iBegin, iN) arguments are the (ByteBuffer, offset,
+   length) arguments to the bind/result method.
+*/
+static int s3jni_setup_nio_args(
+  JNIEnv *env, S3JniNioArgs * pArgs,
+  jobject jBuffer, jint iBegin, jint iN
+){
+  jlong iEnd = 0;
+  *pArgs = S3JniNioArgs_empty;
+  pArgs->jBuf = jBuffer;
+  pArgs->iBegin = iBegin;
+  pArgs->iN = iN;
+  assert( SJG.g.cByteBuffer );
+  if( pArgs->iBegin<0 ){
+    return SQLITE_MISUSE;
+  }
+  s3jni_get_nio_buffer(pArgs->jBuf, &pArgs->p, &pArgs->nBuf);
+  if( !pArgs->p ){
+    return SQLITE_MISUSE;
+  }else if( pArgs->iBegin>=pArgs->nBuf ){
+    pArgs->pStart = 0;
+    pArgs->iOutLen = 0;
+    return 0;
+  }
+  assert( pArgs->nBuf > 0 );
+  assert( pArgs->iBegin < pArgs->nBuf );
+  iEnd = pArgs->iN<0 ? pArgs->nBuf - pArgs->iBegin : pArgs->iBegin + pArgs->iN;
+  if( iEnd>(jlong)pArgs->nBuf ) iEnd = pArgs->nBuf - pArgs->iBegin;
+  if( iEnd - pArgs->iBegin > (jlong)SQLITE_MAX_LENGTH ){
+    return SQLITE_TOOBIG;
+  }
+  assert( pArgs->iBegin >= 0 );
+  assert( iEnd > pArgs->iBegin );
+  pArgs->pStart = pArgs->p + pArgs->iBegin;
+  pArgs->iOutLen = (int)(iEnd - pArgs->iBegin);
+  assert( pArgs->iOutLen > 0 );
+  return 0;
+}
+
+S3JniApi(sqlite3_bind_nio_buffer(),jint,1bind_1nio_1buffer)(
+  JniArgsEnvClass, jobject jpStmt, jint ndx, jobject jBuffer,
+  jint iBegin, jint iN
+){
+  sqlite3_stmt * pStmt = PtrGet_sqlite3_stmt(jpStmt);
+  S3JniNioArgs args;
+  int rc;
+  if( !pStmt || !SJG.g.cByteBuffer ) return SQLITE_MISUSE;
+  rc = s3jni_setup_nio_args(env, &args, jBuffer, iBegin, iN);
+  if(rc){
+    return rc;
+  }else if( !args.pStart || !args.iOutLen ){
+    return sqlite3_bind_null(pStmt, ndx);
+  }
+  assert( args.iOutLen>0 );
+  assert( args.nBuf > 0 );
+  assert( args.pStart != 0 );
+  assert( (args.pStart + args.iOutLen) <= (args.p + args.nBuf) );
+  return sqlite3_bind_blob( pStmt, (int)ndx, args.pStart,
+                            args.iOutLen, SQLITE_TRANSIENT );
 }
 
 S3JniApi(sqlite3_bind_double(),jint,1bind_1double)(
@@ -2907,6 +3061,21 @@ S3JniApi(sqlite3_column_java_object(),jobject,1column_1java_1object)(
       );
     }
     sqlite3_mutex_leave(sqlite3_db_mutex(db));
+  }
+  return rv;
+}
+
+S3JniApi(sqlite3_value_nio_buffer(),jobject,1column_1nio_1buffer)(
+  JniArgsEnvClass, jobject jStmt, jint ndx
+){
+  sqlite3_stmt * const stmt = PtrGet_sqlite3_stmt(jStmt);
+  jobject rv = 0;
+  if( stmt ){
+    const void * const p = sqlite3_column_blob(stmt, (int)ndx);
+    if( p ){
+      const int n = sqlite3_column_bytes(stmt, (int)ndx);
+      rv = s3jni__blob_to_ByteBuffer(env, p, n);
+    }
   }
   return rv;
 }
@@ -4417,6 +4586,40 @@ S3JniApi(sqlite3_result_java_object(),void,1result_1java_1object)(
   }
 }
 
+S3JniApi(sqlite3_result_nio_buffer(),void,1result_1nio_1buffer)(
+  JniArgsEnvClass, jobject jpCtx, jobject jBuffer,
+  jint iBegin, jint iN
+){
+  sqlite3_context * pCx = PtrGet_sqlite3_context(jpCtx);
+  int rc;
+  S3JniNioArgs args;
+  if( !pCx ){
+    return;
+  }else if( !SJG.g.cByteBuffer ){
+    sqlite3_result_error(
+      pCx, "This JVM does not support JNI access to ByteBuffers.", -1
+    );
+    return;
+  }
+  rc = s3jni_setup_nio_args(env, &args, jBuffer, iBegin, iN);
+  if(rc){
+    if( iBegin<0 ){
+      sqlite3_result_error(pCx, "Start index may not be negative.", -1);
+    }else if( SQLITE_TOOBIG==rc ){
+      sqlite3_result_error_toobig(pCx);
+    }else{
+      sqlite3_result_error(
+        pCx, "Invalid arguments to sqlite3_result_nio_buffer().", -1
+      );
+    }
+  }else if( !args.pStart || !args.iOutLen ){
+    sqlite3_result_null(pCx);
+  }else{
+    sqlite3_result_blob(pCx, args.pStart, args.iOutLen, SQLITE_TRANSIENT);
+  }
+}
+
+
 S3JniApi(sqlite3_result_null(),void,1result_1null)(
   JniArgsEnvClass, jobject jpCx
 ){
@@ -4943,6 +5146,21 @@ S3JniApi(sqlite3_value_java_object(),jobject,1value_1java_1object)(
   return sv
     ? sqlite3_value_pointer(sv, s3jni__value_jref_key)
     : 0;
+}
+
+S3JniApi(sqlite3_value_nio_buffer(),jobject,1value_1nio_1buffer)(
+  JniArgsEnvClass, jobject jVal
+){
+  sqlite3_value * const sv = PtrGet_sqlite3_value(jVal);
+  jobject rv = 0;
+  if( sv ){
+    const void * const p = sqlite3_value_blob(sv);
+    if( p ){
+      const int n = sqlite3_value_bytes(sv);
+      rv = s3jni__blob_to_ByteBuffer(env, p, n);
+    }
+  }
+  return rv;
 }
 
 S3JniApi(sqlite3_value_text(),jbyteArray,1value_1text)(
@@ -5951,10 +6169,15 @@ Java_org_sqlite_jni_capi_CApi_init(JniArgsEnvClass){
     unsigned char buf[16] = {0};
     jobject bb = (*env)->NewDirectByteBuffer(env, buf, 16);
     if( bb ){
-      SJG.g.cByteBuffer = (*env)->GetObjectClass(env, bb);
+      SJG.g.cByteBuffer = S3JniRefGlobal((*env)->GetObjectClass(env, bb));
+      SJG.g.byteBufferAlloc = (*env)->GetStaticMethodID(
+        env, SJG.g.cByteBuffer, "allocateDirect", "(I)Ljava/nio/ByteBuffer;"
+      );
+      S3JniExceptionIsFatal("Error getting ByteBuffer.allocateDirect() method.");
       S3JniUnrefLocal(bb);
     }else{
       SJG.g.cByteBuffer = 0;
+      SJG.g.byteBufferAlloc = 0;
     }
   }
 

@@ -38,6 +38,14 @@ import java.util.concurrent.Future;
 @java.lang.annotation.Target({java.lang.annotation.ElementType.METHOD})
 @interface SingleThreadOnly{}
 
+/**
+   Annotation for Tester1 tests which must only be run if
+   sqlite3_jni_supports_nio() is true.
+*/
+@java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.RUNTIME)
+@java.lang.annotation.Target({java.lang.annotation.ElementType.METHOD})
+@interface RequiresJniNio{}
+
 public class Tester1 implements Runnable {
   //! True when running in multi-threaded mode.
   private static boolean mtMode = false;
@@ -486,6 +494,7 @@ public class Tester1 implements Runnable {
     stmt = prepare(db, "SELECT a FROM t ORDER BY a DESC;");
     StringBuilder sbuf = new StringBuilder();
     n = 0;
+    final boolean tryNio = sqlite3_jni_supports_nio();
     while( SQLITE_ROW == sqlite3_step(stmt) ){
       final sqlite3_value sv = sqlite3_value_dup(sqlite3_column_value(stmt,0));
       final String txt = sqlite3_column_text16(stmt, 0);
@@ -500,6 +509,15 @@ public class Tester1 implements Runnable {
                            StandardCharsets.UTF_8)) );
       affirm( txt.length() == sqlite3_value_bytes16(sv)/2 );
       affirm( txt.equals(sqlite3_value_text16(sv)) );
+      if( tryNio ){
+        java.nio.ByteBuffer bu = sqlite3_value_nio_buffer(sv);
+        byte ba[] = sqlite3_value_blob(sv);
+        affirm( ba.length == bu.capacity() );
+        int i = 0;
+        for( byte b : ba ){
+          affirm( b == bu.get(i++) );
+        }
+      }
       sqlite3_value_free(sv);
       ++n;
     }
@@ -554,6 +572,78 @@ public class Tester1 implements Runnable {
     sqlite3_finalize(stmt);
     affirm(1 == n);
     affirm(total == 0x32 + 0x33 + 0x34);
+    sqlite3_close_v2(db);
+  }
+
+  @RequiresJniNio
+  private void testBindByteBuffer(){
+    /* TODO: these tests need to be much more extensive to check the
+       begin/end range handling. */
+
+    java.nio.ByteBuffer zeroCheck =
+      java.nio.ByteBuffer.allocateDirect(0);
+    affirm( null != zeroCheck );
+    zeroCheck = null;
+    sqlite3 db = createNewDb();
+    execSql(db, "CREATE TABLE t(a)");
+
+    final java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocateDirect(10);
+    buf.put((byte)0x31)/*note that we'll skip this one*/
+      .put((byte)0x32)
+      .put((byte)0x33)
+      .put((byte)0x34)
+      .put((byte)0x35)/*we'll skip this one too*/;
+
+    final int expectTotal = buf.get(1) + buf.get(2) + buf.get(3);
+    sqlite3_stmt stmt = prepare(db, "INSERT INTO t(a) VALUES(?);");
+    affirm( SQLITE_MISUSE == sqlite3_bind_blob(stmt, 1, buf, -1, 0) );
+    affirm( 0 == sqlite3_bind_blob(stmt, 1, buf, 1, 3) );
+    affirm( SQLITE_DONE == sqlite3_step(stmt) );
+    sqlite3_finalize(stmt);
+    stmt = prepare(db, "SELECT a FROM t;");
+    int total = 0;
+    affirm( SQLITE_ROW == sqlite3_step(stmt) );
+    byte blob[] = sqlite3_column_blob(stmt, 0);
+    java.nio.ByteBuffer nioBlob =
+      sqlite3_column_nio_buffer(stmt, 0);
+    affirm(3 == blob.length);
+    affirm(blob.length == nioBlob.capacity());
+    affirm(blob.length == nioBlob.limit());
+    int i = 0;
+    for(byte b : blob){
+      affirm( i<=3 );
+      affirm(b == buf.get(1 + i));
+      affirm(b == nioBlob.get(i));
+      ++i;
+      total += b;
+    }
+    affirm( SQLITE_DONE == sqlite3_step(stmt) );
+    sqlite3_finalize(stmt);
+    affirm(total == expectTotal);
+
+    SQLFunction func =
+      new ScalarFunction(){
+        public void xFunc(sqlite3_context cx, sqlite3_value[] args){
+          sqlite3_result_blob(cx, buf, 1, 3);
+        }
+      };
+
+    affirm( 0 == sqlite3_create_function(db, "myfunc", -1, SQLITE_UTF8, func) );
+    stmt = prepare(db, "SELECT myfunc()");
+    affirm( SQLITE_ROW == sqlite3_step(stmt) );
+    blob = sqlite3_column_blob(stmt, 0);
+    affirm(3 == blob.length);
+    i = 0;
+    total = 0;
+    for(byte b : blob){
+      affirm( i<=3 );
+      affirm(b == buf.get(1 + i++));
+      total += b;
+    }
+    affirm( SQLITE_DONE == sqlite3_step(stmt) );
+    sqlite3_finalize(stmt);
+    affirm(total == expectTotal);
+
     sqlite3_close_v2(db);
   }
 
@@ -1877,18 +1967,20 @@ public class Tester1 implements Runnable {
           if( forceFail ){
             testMethods.add(m);
           }
+        }else if( m.isAnnotationPresent( RequiresJniNio.class )
+                  && !sqlite3_jni_supports_nio() ){
+          outln("Skipping test for lack of JNI java.nio.ByteBuffer support: ",
+                name,"()\n");
+          ++nSkipped;
         }else if( !m.isAnnotationPresent( ManualTest.class ) ){
           if( nThread>1 && m.isAnnotationPresent( SingleThreadOnly.class ) ){
-            if( 0==nSkipped++ ){
-              out("Skipping tests in multi-thread mode:");
-            }
-            out(" "+name+"()");
+            out("Skipping test in multi-thread mode: ",name,"()\n");
+            ++nSkipped;
           }else if( name.startsWith("test") ){
             testMethods.add(m);
           }
         }
       }
-      if( nSkipped>0 ) out("\n");
     }
 
     final long timeStart = System.currentTimeMillis();
