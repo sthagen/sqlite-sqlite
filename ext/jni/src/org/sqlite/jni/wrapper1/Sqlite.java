@@ -606,6 +606,14 @@ public final class Sqlite implements AutoCloseable  {
   }
 
   /**
+     Equivallent to prepareMulti(X,prepFlags,visitor), where X is
+     sql.getBytes(StandardCharsets.UTF_8).
+  */
+  public void prepareMulti(String sql, int prepFlags, PrepareMulti visitor){
+    prepareMulti(sql.getBytes(StandardCharsets.UTF_8), prepFlags, visitor);
+  }
+
+  /**
      A variant of prepare() which can handle multiple SQL statements
      in a single input string. For each statement in the given string,
      the statement is passed to visitor.call() a single time, passing
@@ -619,6 +627,11 @@ public final class Sqlite implements AutoCloseable  {
 
      PrepareMultiFinalize offers a proxy which finalizes each
      statement after it is passed to another client-defined visitor.
+
+     Be aware that certain legal SQL constructs may fail in the
+     preparation phase, before the corresponding statement can be
+     stepped. Most notably, authorizer checks which disallow access to
+     something in a statement behave that way.
   */
   public void prepareMulti(byte sqlUtf8[], int prepFlags, PrepareMulti visitor){
     int pos = 0, n = 1;
@@ -644,14 +657,6 @@ public final class Sqlite implements AutoCloseable  {
       }
       visitor.call(new Stmt(this, stmt));
     }
-  }
-
-  /**
-     Equivallent to prepareMulti(X,prepFlags,visitor), where X is
-     sql.getBytes(StandardCharsets.UTF_8).
-  */
-  public void prepareMulti(String sql, int prepFlags, PrepareMulti visitor){
-    prepareMulti(sql.getBytes(StandardCharsets.UTF_8), prepFlags, visitor);
   }
 
   public void createFunction(String name, int nArg, int eTextRep, ScalarFunction f){
@@ -1042,6 +1047,22 @@ public final class Sqlite implements AutoCloseable  {
             "This \"cannot happen\": all possible result codes were checked already."
           );
       }
+    }
+
+    /**
+       Works like sqlite3_step(), returning the same result codes as
+       that function unless throwOnError is true, in which case it
+       will throw an SqliteException for any result codes other than
+       Sqlite.ROW or Sqlite.DONE.
+
+       The utility of this overload over the no-argument one is the
+       ability to handle BUSY and LOCKED errors more easily.
+    */
+    public int step(boolean throwOnError){
+      final int rc = (null==stmt)
+              ? Sqlite.MISUSE
+              : CApi.sqlite3_step(stmt);
+      return throwOnError ? checkRc(rc) : rc;
     }
 
     /**

@@ -119,15 +119,36 @@ public final class CApi {
      <p>This routine returns false without side effects if the current
      JNIEnv is not cached, else returns true, but this information is
      primarily for testing of the JNI bindings and is not information
-     which client-level code can use to make any informed decisions.
+     which client-level code can use to make any informed
+     decisions. Its return type and semantics are not considered
+     stable and may change at any time.
   */
   public static native boolean sqlite3_java_uncache_thread();
 
   /**
-     Returns true if this JVM has JNI-level support for direct memory
-     access using java.nio.ByteBuffer, else returns false.
+     Returns true if this JVM has JNI-level support for C-level direct
+     memory access using java.nio.ByteBuffer, else returns false.
   */
   public static native boolean sqlite3_jni_supports_nio();
+
+  /**
+     For internal use only. Sets the given db's error code and
+     (optionally) string. If rc is 0, it defaults to SQLITE_ERROR.
+
+     On success it returns rc. On error it may return a more serious
+     code, such as SQLITE_NOMEM. Returns SQLITE_MISUSE if db is null.
+  */
+  static native int sqlite3_jni_db_error(@NotNull sqlite3 db,
+                                         int rc, @Nullable String msg);
+
+  /**
+     Convenience overload which uses e.toString() as the error
+     message.
+  */
+  static int sqlite3_jni_db_error(@NotNull sqlite3 db,
+                                  int rc, @NotNull Exception e){
+    return sqlite3_jni_db_error(db, rc, e.toString());
+  }
 
   //////////////////////////////////////////////////////////////////////
   // Maintenance reminder: please keep the sqlite3_.... functions
@@ -287,12 +308,13 @@ public final class CApi {
      Binds the contents of the given buffer object as a blob.
 
      The byte range of the buffer may be restricted by providing a
-     start index and a number of bytes. beginPos may not be negative
-     but a negative howMany is interpretated as the remainder of the
-     buffer past the given start position.
+     start index and a number of bytes. beginPos may not be negative.
+     Negative howMany is interpretated as the remainder of the buffer
+     past the given start position, up to the buffer's limit() (as
+     opposed its capacity()).
 
-     If beginPos+howMany would extend past the end of the buffer, the
-     range is silently truncated to fit the buffer.
+     If beginPos+howMany would extend past the limit() of the buffer
+     then SQLITE_ERROR is returned.
 
      If any of the following are true, this function behaves like
      sqlite3_bind_null(): the buffer is null, beginPos is at or past
@@ -326,7 +348,8 @@ public final class CApi {
   );
 
   /**
-     Convenience overload which binds the given buffer's entire contents.
+     Convenience overload which binds the given buffer's entire
+     contents, up to its limit() (as opposed to its capacity()).
   */
   public static int sqlite3_bind_nio_buffer(
     @NotNull sqlite3_stmt stmt, int ndx, @Nullable java.nio.ByteBuffer data
@@ -538,13 +561,116 @@ public final class CApi {
   };
 
   private static native int sqlite3_blob_read(
-    @NotNull long ptrToBlob, @NotNull byte[] target, int iOffset
+    @NotNull long ptrToBlob, @NotNull byte[] target, int srcOffset
   );
 
+  /**
+     As per C's sqlite3_blob_read(), but writes its output to the
+     given byte array. Note that the final argument is the offset of
+     the source buffer, not the target array.
+   */
   public static int sqlite3_blob_read(
-    @NotNull sqlite3_blob b, @NotNull byte[] target, int iOffset
+    @NotNull sqlite3_blob src, @NotNull byte[] target, int srcOffset
   ){
-    return sqlite3_blob_read(b.getNativePointer(), target, iOffset);
+    return sqlite3_blob_read(src.getNativePointer(), target, srcOffset);
+  }
+
+  /**
+     An internal level of indirection.
+  */
+  private static native int sqlite3_blob_read_nio_buffer(
+    @NotNull long ptrToBlob, int srcOffset,
+    @NotNull java.nio.ByteBuffer tgt, int tgtOffset, int howMany
+  );
+
+  /**
+     Reads howMany bytes from offset srcOffset of src into position
+     tgtOffset of tgt.
+
+     Returns SQLITE_MISUSE if src is null, tgt is null, or
+     sqlite3_jni_supports_nio() returns false. Returns SQLITE_ERROR if
+     howMany or either offset are negative.  If argument validation
+     succeeds, it returns the result of the underlying call to
+     sqlite3_blob_read() (0 on success).
+  */
+  public static int sqlite3_blob_read_nio_buffer(
+    @NotNull sqlite3_blob src, int srcOffset,
+    @NotNull java.nio.ByteBuffer tgt, int tgtOffset, int howMany
+  ){
+    return (JNI_SUPPORTS_NIO && src!=null && tgt!=null)
+      ? sqlite3_blob_read_nio_buffer(
+        src.getNativePointer(), srcOffset, tgt, tgtOffset, howMany
+      )
+      : SQLITE_MISUSE;
+  }
+
+  /**
+     Convenience overload which reads howMany bytes from position
+     srcOffset of src and returns the result as a new ByteBuffer.
+
+     srcOffset may not be negative. If howMany is negative, it is
+     treated as all bytes following srcOffset.
+
+     Returns null if sqlite3_jni_supports_nio(), any arguments are
+     invalid, if the number of bytes to read is 0 or is larger than
+     the src blob, or the underlying call to sqlite3_blob_read() fails
+     for any reason.
+  */
+  public static java.nio.ByteBuffer sqlite3_blob_read_nio_buffer(
+    @NotNull sqlite3_blob src, int srcOffset, int howMany
+  ){
+    if( !JNI_SUPPORTS_NIO || src==null ) return null;
+    else if( srcOffset<0 ) return null;
+    final int nB = sqlite3_blob_bytes(src);
+    if( srcOffset>=nB ) return null;
+    else if( howMany<0 ) howMany = nB - srcOffset;
+    if( srcOffset + howMany > nB ) return null;
+    final java.nio.ByteBuffer tgt =
+      java.nio.ByteBuffer.allocateDirect(howMany);
+    final int rc = sqlite3_blob_read_nio_buffer(
+      src.getNativePointer(), srcOffset, tgt, 0, howMany
+    );
+    return 0==rc ? tgt : null;
+  }
+
+  /**
+     Overload alias for sqlite3_blob_read_nio_buffer().
+  */
+  public static int sqlite3_blob_read(
+    @NotNull sqlite3_blob src, int srcOffset,
+    @NotNull java.nio.ByteBuffer tgt,
+    int tgtOffset, int howMany
+  ){
+    return sqlite3_blob_read_nio_buffer(
+      src, srcOffset, tgt, tgtOffset, howMany
+    );
+  }
+
+  /**
+     Convenience overload which uses 0 for both src and tgt offsets
+     and reads a number of bytes equal to the smaller of
+     sqlite3_blob_bytes(src) and tgt.limit().
+
+     On success it sets tgt.limit() to the number of bytes read. On
+     error, tgt.limit() is not modified.
+
+     Returns 0 on success. Returns SQLITE_MISUSE is either argument is
+     null or sqlite3_jni_supports_nio() returns false. Else it returns
+     the result of the underlying call to sqlite3_blob_read().
+  */
+  public static int sqlite3_blob_read(
+    @NotNull sqlite3_blob src,
+    @NotNull java.nio.ByteBuffer tgt
+  ){
+    if(!JNI_SUPPORTS_NIO || src==null || tgt==null) return SQLITE_MISUSE;
+    final int nSrc = sqlite3_blob_bytes(src);
+    final int nTgt = tgt.limit();
+    final int nRead = nTgt<nSrc ? nTgt : nSrc;
+    final int rc = sqlite3_blob_read_nio_buffer(
+      src.getNativePointer(), 0, tgt, 0, nRead
+    );
+    if( 0==rc && nTgt!=nRead ) tgt.limit( nRead );
+    return rc;
   }
 
   private static native int sqlite3_blob_reopen(
@@ -563,6 +689,79 @@ public final class CApi {
     @NotNull sqlite3_blob b, @NotNull byte[] bytes, int iOffset
   ){
     return sqlite3_blob_write(b.getNativePointer(), bytes, iOffset);
+  }
+
+  /**
+     An internal level of indirection.
+  */
+  private static native int sqlite3_blob_write_nio_buffer(
+    @NotNull long ptrToBlob, int tgtOffset,
+    @NotNull java.nio.ByteBuffer src,
+    int srcOffset, int howMany
+  );
+
+  /**
+     Writes howMany bytes of memory from offset srcOffset of the src
+     buffer at position tgtOffset of b.
+
+     If howMany is negative then it's equivalent to the number of
+     bytes remaining starting at srcOffset.
+
+     Returns SQLITE_MISUSE if tgt is null or sqlite3_jni_supports_nio()
+     returns false.
+
+     Returns SQLITE_MISUSE if src is null or
+     sqlite3_jni_supports_nio() returns false. Returns SQLITE_ERROR if
+     either offset is negative.  If argument validation succeeds, it
+     returns the result of the underlying call to sqlite3_blob_read().
+  */
+  public static int sqlite3_blob_write_nio_buffer(
+    @NotNull sqlite3_blob tgt, int tgtOffset,
+    @NotNull java.nio.ByteBuffer src,
+    int srcOffset, int howMany
+  ){
+    return sqlite3_blob_write_nio_buffer(
+      tgt.getNativePointer(), tgtOffset, src, srcOffset, howMany
+    );
+  }
+
+  /**
+     Overload alias for sqlite3_blob_write_nio_buffer().
+  */
+  public static int sqlite3_blob_write(
+    @NotNull sqlite3_blob tgt, int tgtOffset,
+    @NotNull java.nio.ByteBuffer src,
+    int srcOffset, int howMany
+  ){
+    return sqlite3_blob_write_nio_buffer(
+      tgt.getNativePointer(), tgtOffset, src, srcOffset, howMany
+    );
+  }
+
+  /**
+     Convenience overload which writes all of src to the given offset
+     of b.
+  */
+  public static int sqlite3_blob_write(
+    @NotNull sqlite3_blob tgt, int tgtOffset,
+    @NotNull java.nio.ByteBuffer src
+  ){
+    return sqlite3_blob_write_nio_buffer(
+      tgt.getNativePointer(), tgtOffset, src, 0, -1
+    );
+  }
+
+  /**
+     Convenience overload which writes all of src to offset 0
+     of tgt.
+   */
+  public static int sqlite3_blob_write(
+    @NotNull sqlite3_blob tgt,
+    @NotNull java.nio.ByteBuffer src
+  ){
+    return sqlite3_blob_write_nio_buffer(
+      tgt.getNativePointer(), 0, src, 0, -1
+    );
   }
 
   private static native int sqlite3_busy_handler(
@@ -1279,9 +1478,13 @@ public final class CApi {
      array.  It loops over the input bytes looking for
      statements. Each one it finds is passed to p.call(), passing
      ownership of it to that function. If p.call() returns 0, looping
-     continues, else the loop stops.
+     continues, else the loop stops and p.call()'s result code is
+     returned. If preparation of any given segment fails, looping
+     stops and that result code is returned.
 
-     <p>If p.call() throws, the exception is propagated.
+     <p>If p.call() throws, the exception is converted to a db-level
+     error and a non-0 code is returned, in order to retain the
+     C-style error semantics of the API.
 
      <p>How each statement is handled, including whether it is finalized
      or not, is up to the callback object. e.g. the callback might
@@ -1313,7 +1516,11 @@ public final class CApi {
         // empty statement (whitespace/comments)
         continue;
       }
-      rc = p.call(stmt);
+      try{
+        rc = p.call(stmt);
+      }catch(Exception e){
+        rc = sqlite3_jni_db_error( db, SQLITE_ERROR, e );
+      }
     }
     return rc;
   }
@@ -1787,7 +1994,8 @@ public final class CApi {
 
      <ul>
 
-     <li>text is null: translates to a call to sqlite3_result_null()</li>
+     <li>text is null: translates to a call to {@link
+     #sqlite3_result_null}</li>
 
      <li>text is too large: translates to a call to
      {@link #sqlite3_result_error_toobig}</li>
@@ -2637,8 +2845,8 @@ public final class CApi {
   public static final int SQLITE_FAIL = 3;
   public static final int SQLITE_REPLACE = 5;
   static {
-    // This MUST come after the SQLITE_MAX_... values or else
-    // attempting to modify them silently fails.
     init();
   }
+  /* Must come after static init(). */
+  private static final boolean JNI_SUPPORTS_NIO = sqlite3_jni_supports_nio();
 }

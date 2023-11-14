@@ -596,7 +596,8 @@ public class Tester1 implements Runnable {
 
     final int expectTotal = buf.get(1) + buf.get(2) + buf.get(3);
     sqlite3_stmt stmt = prepare(db, "INSERT INTO t(a) VALUES(?);");
-    affirm( SQLITE_MISUSE == sqlite3_bind_blob(stmt, 1, buf, -1, 0) );
+    affirm( SQLITE_ERROR == sqlite3_bind_blob(stmt, 1, buf, -1, 0),
+            "Buffer offset may not be negative." );
     affirm( 0 == sqlite3_bind_blob(stmt, 1, buf, 1, 3) );
     affirm( SQLITE_DONE == sqlite3_step(stmt) );
     sqlite3_finalize(stmt);
@@ -1742,6 +1743,86 @@ public class Tester1 implements Runnable {
     affirm( 100==tgt[0] && 101==tgt[1] && 102==tgt[2], "DEF" );
     rc = sqlite3_blob_close(b);
     affirm( 0==rc );
+
+    if( !sqlite3_jni_supports_nio() ){
+      outln("WARNING: skipping tests for ByteBuffer-using sqlite3_blob APIs ",
+            "because this platform lacks that support.");
+      sqlite3_close_v2(db);
+      return;
+    }
+    /* Sanity checks for the java.nio.ByteBuffer-taking overloads of
+       sqlite3_blob_read/write(). */
+    execSql(db, "UPDATE t SET a=zeroblob(10)");
+    b = sqlite3_blob_open(db, "main", "t", "a", 1, 1);
+    affirm( null!=b );
+    java.nio.ByteBuffer bb = java.nio.ByteBuffer.allocateDirect(10);
+    for( byte i = 0; i < 10; ++i ){
+      bb.put((int)i, (byte)(48+i & 0xff));
+    }
+    rc = sqlite3_blob_write(b, 1, bb, 1, 10);
+    affirm( rc==SQLITE_ERROR, "b length < (srcOffset + bb length)" );
+    rc = sqlite3_blob_write(b, -1, bb);
+    affirm( rc==SQLITE_ERROR, "Target offset may not be negative" );
+    rc = sqlite3_blob_write(b, 0, bb, -1, -1);
+    affirm( rc==SQLITE_ERROR, "Source offset may not be negative" );
+    rc = sqlite3_blob_write(b, 1, bb, 1, 8);
+    affirm( rc==0 );
+    // b's contents: 0 49  50  51  52  53  54  55  56  0
+    //        ascii: 0 '1' '2' '3' '4' '5' '6' '7' '8' 0
+    byte br[] = new byte[10];
+    java.nio.ByteBuffer bbr =
+      java.nio.ByteBuffer.allocateDirect(bb.limit());
+    rc = sqlite3_blob_read( b, br, 0 );
+    affirm( rc==0 );
+    rc = sqlite3_blob_read( b, bbr );
+    affirm( rc==0 );
+    java.nio.ByteBuffer bbr2 = sqlite3_blob_read_nio_buffer(b, 0, 12);
+    affirm( null==bbr2, "Read size is too big");
+    bbr2 = sqlite3_blob_read_nio_buffer(b, -1, 3);
+    affirm( null==bbr2, "Source offset is negative");
+    bbr2 = sqlite3_blob_read_nio_buffer(b, 5, 6);
+    affirm( null==bbr2, "Read pos+size is too big");
+    bbr2 = sqlite3_blob_read_nio_buffer(b, 4, 7);
+    affirm( null==bbr2, "Read pos+size is too big");
+    bbr2 = sqlite3_blob_read_nio_buffer(b, 4, 6);
+    affirm( null!=bbr2 );
+    java.nio.ByteBuffer bbr3 =
+      java.nio.ByteBuffer.allocateDirect(2 * bb.limit());
+    java.nio.ByteBuffer bbr4 =
+      java.nio.ByteBuffer.allocateDirect(5);
+    rc = sqlite3_blob_read( b, bbr3 );
+    affirm( rc==0 );
+    rc = sqlite3_blob_read( b, bbr4 );
+    affirm( rc==0 );
+    affirm( sqlite3_blob_bytes(b)==bbr3.limit() );
+    affirm( 5==bbr4.limit() );
+    sqlite3_blob_close(b);
+    affirm( 0==br[0] );
+    affirm( 0==br[9] );
+    affirm( 0==bbr.get(0) );
+    affirm( 0==bbr.get(9) );
+    affirm( bbr2.limit() == 6 );
+    affirm( 0==bbr3.get(0) );
+    {
+      Exception ex = null;
+      try{ bbr3.get(11); }
+      catch(Exception e){ex = e;}
+      affirm( ex instanceof IndexOutOfBoundsException,
+              "bbr3.limit() was reset by read()" );
+      ex = null;
+    }
+    affirm( 0==bbr4.get(0) );
+    for( int i = 1; i < 9; ++i ){
+      affirm( br[i] == 48 + i );
+      affirm( br[i] == bbr.get(i) );
+      affirm( br[i] == bbr3.get(i) );
+      if( i>3 ){
+        affirm( br[i] == bbr2.get(i-4) );
+      }
+      if( i < bbr4.limit() ){
+        affirm( br[i] == bbr4.get(i) );
+      }
+    }
     sqlite3_close_v2(db);
   }
 
@@ -1754,9 +1835,13 @@ public class Tester1 implements Runnable {
     };
     final List<sqlite3_stmt> liStmt = new ArrayList<sqlite3_stmt>();
     final PrepareMultiCallback proxy = new PrepareMultiCallback.StepAll();
+    final ValueHolder<String> toss = new ValueHolder<>(null);
     PrepareMultiCallback m = new PrepareMultiCallback() {
         @Override public int call(sqlite3_stmt st){
           liStmt.add(st);
+          if( null!=toss.value ){
+            throw new RuntimeException(toss.value);
+          }
           return proxy.call(st);
         }
       };
@@ -1766,6 +1851,10 @@ public class Tester1 implements Runnable {
     for( sqlite3_stmt st : liStmt ){
       sqlite3_finalize(st);
     }
+    toss.value = "This is an exception.";
+    rc = sqlite3_prepare_multi(db, "SELECT 1", m);
+    affirm( SQLITE_ERROR==rc );
+    affirm( sqlite3_errmsg(db).indexOf(toss.value)>0 );
     sqlite3_close_v2(db);
   }
 
