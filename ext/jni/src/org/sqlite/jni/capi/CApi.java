@@ -9,7 +9,7 @@
 **    May you share freely, never taking more than you give.
 **
 *************************************************************************
-** This file declares JNI bindings for the sqlite3 C API.
+** This file declares the main JNI bindings for the sqlite3 C API.
 */
 package org.sqlite.jni.capi;
 import java.nio.charset.StandardCharsets;
@@ -129,6 +129,7 @@ public final class CApi {
      Returns true if this JVM has JNI-level support for C-level direct
      memory access using java.nio.ByteBuffer, else returns false.
   */
+  @Experimental
   public static native boolean sqlite3_jni_supports_nio();
 
   /**
@@ -254,6 +255,7 @@ public final class CApi {
      Convenience overload which is a simple proxy for
      sqlite3_bind_nio_buffer().
   */
+  @Experimental
   public static int sqlite3_bind_blob(
     @NotNull sqlite3_stmt stmt, int ndx, @Nullable java.nio.ByteBuffer data,
     int begin, int n
@@ -266,6 +268,7 @@ public final class CApi {
      to sqlite3_bind_nio_buffer() with the values 0 and -1 for the
      final two arguments.
   */
+  @Experimental
   public static int sqlite3_bind_blob(
     @NotNull sqlite3_stmt stmt, int ndx, @Nullable java.nio.ByteBuffer data
   ){
@@ -342,6 +345,7 @@ public final class CApi {
 
      @see https://docs.oracle.com/javase/8/docs/api/java/nio/Buffer.html
   */
+  @Experimental
   public static native int sqlite3_bind_nio_buffer(
     @NotNull sqlite3_stmt stmt, int ndx, @Nullable java.nio.ByteBuffer data,
     int beginPos, int howMany
@@ -351,6 +355,7 @@ public final class CApi {
      Convenience overload which binds the given buffer's entire
      contents, up to its limit() (as opposed to its capacity()).
   */
+  @Experimental
   public static int sqlite3_bind_nio_buffer(
     @NotNull sqlite3_stmt stmt, int ndx, @Nullable java.nio.ByteBuffer data
   ){
@@ -578,6 +583,7 @@ public final class CApi {
   /**
      An internal level of indirection.
   */
+  @Experimental
   private static native int sqlite3_blob_read_nio_buffer(
     @NotNull long ptrToBlob, int srcOffset,
     @NotNull java.nio.ByteBuffer tgt, int tgtOffset, int howMany
@@ -593,6 +599,7 @@ public final class CApi {
      succeeds, it returns the result of the underlying call to
      sqlite3_blob_read() (0 on success).
   */
+  @Experimental
   public static int sqlite3_blob_read_nio_buffer(
     @NotNull sqlite3_blob src, int srcOffset,
     @NotNull java.nio.ByteBuffer tgt, int tgtOffset, int howMany
@@ -616,6 +623,7 @@ public final class CApi {
      the src blob, or the underlying call to sqlite3_blob_read() fails
      for any reason.
   */
+  @Experimental
   public static java.nio.ByteBuffer sqlite3_blob_read_nio_buffer(
     @NotNull sqlite3_blob src, int srcOffset, int howMany
   ){
@@ -636,6 +644,7 @@ public final class CApi {
   /**
      Overload alias for sqlite3_blob_read_nio_buffer().
   */
+  @Experimental
   public static int sqlite3_blob_read(
     @NotNull sqlite3_blob src, int srcOffset,
     @NotNull java.nio.ByteBuffer tgt,
@@ -658,6 +667,7 @@ public final class CApi {
      null or sqlite3_jni_supports_nio() returns false. Else it returns
      the result of the underlying call to sqlite3_blob_read().
   */
+  @Experimental
   public static int sqlite3_blob_read(
     @NotNull sqlite3_blob src,
     @NotNull java.nio.ByteBuffer tgt
@@ -694,6 +704,7 @@ public final class CApi {
   /**
      An internal level of indirection.
   */
+  @Experimental
   private static native int sqlite3_blob_write_nio_buffer(
     @NotNull long ptrToBlob, int tgtOffset,
     @NotNull java.nio.ByteBuffer src,
@@ -715,6 +726,7 @@ public final class CApi {
      either offset is negative.  If argument validation succeeds, it
      returns the result of the underlying call to sqlite3_blob_read().
   */
+  @Experimental
   public static int sqlite3_blob_write_nio_buffer(
     @NotNull sqlite3_blob tgt, int tgtOffset,
     @NotNull java.nio.ByteBuffer src,
@@ -728,6 +740,7 @@ public final class CApi {
   /**
      Overload alias for sqlite3_blob_write_nio_buffer().
   */
+  @Experimental
   public static int sqlite3_blob_write(
     @NotNull sqlite3_blob tgt, int tgtOffset,
     @NotNull java.nio.ByteBuffer src,
@@ -742,6 +755,7 @@ public final class CApi {
      Convenience overload which writes all of src to the given offset
      of b.
   */
+  @Experimental
   public static int sqlite3_blob_write(
     @NotNull sqlite3_blob tgt, int tgtOffset,
     @NotNull java.nio.ByteBuffer src
@@ -755,6 +769,7 @@ public final class CApi {
      Convenience overload which writes all of src to offset 0
      of tgt.
    */
+  @Experimental
   public static int sqlite3_blob_write(
     @NotNull sqlite3_blob tgt,
     @NotNull java.nio.ByteBuffer src
@@ -910,6 +925,7 @@ public final class CApi {
      sqlite3_jni_supports_nio() is false, or if sqlite3_column_blob()
      would return null for the same inputs.
   */
+  @Experimental
   public static native java.nio.ByteBuffer sqlite3_column_nio_buffer(
     @NotNull sqlite3_stmt stmt, int ndx
   );
@@ -1039,6 +1055,24 @@ public final class CApi {
     return sqlite3_complete( nulTerminateUtf8(sql) );
   }
 
+  /**
+     Internal level of indirection for sqlite3_config(int).
+  */
+  private static native int sqlite3_config__enable(int op);
+
+  /**
+     Internal level of indirection for sqlite3_config(ConfigLogCallback).
+  */
+  private static native int sqlite3_config__CONFIG_LOG(
+    @Nullable ConfigLogCallback logger
+  );
+
+  /**
+     Internal level of indirection for sqlite3_config(ConfigSqlLogCallback).
+  */
+  private static native int sqlite3_config__SQLLOG(
+    @Nullable ConfigSqlLogCallback logger
+  );
 
   /**
      <p>Works like in the C API with the exception that it only supports
@@ -1055,12 +1089,14 @@ public final class CApi {
      the rest of the library. This must not be called when any other
      library APIs are being called.
   */
-  public static native int sqlite3_config(int op);
+  public static int sqlite3_config(int op){
+    return sqlite3_config__enable(op);
+  }
 
   /**
      If the native library was built with SQLITE_ENABLE_SQLLOG defined
      then this acts as a proxy for C's
-     sqlite3_config(SQLITE_ENABLE_SQLLOG,...). This sets or clears the
+     sqlite3_config(SQLITE_CONFIG_SQLLOG,...). This sets or clears the
      logger. If installation of a logger fails, any previous logger is
      retained.
 
@@ -1071,13 +1107,17 @@ public final class CApi {
      the rest of the library. This must not be called when any other
      library APIs are being called.
   */
-  public static native int sqlite3_config( @Nullable ConfigSqllogCallback logger );
+  public static int sqlite3_config( @Nullable ConfigSqlLogCallback logger ){
+    return sqlite3_config__SQLLOG(logger);
+  }
 
   /**
      The sqlite3_config() overload for handling the SQLITE_CONFIG_LOG
      option.
   */
-  public static native int sqlite3_config( @Nullable ConfigLogCallback logger );
+  public static int sqlite3_config( @Nullable ConfigLogCallback logger ){
+    return sqlite3_config__CONFIG_LOG(logger);
+  }
 
   /**
      Unlike the C API, this returns null if its argument is
@@ -1807,6 +1847,7 @@ public final class CApi {
      If the resulting slice of the buffer exceeds SQLITE_LIMIT_LENGTH
      then this function behaves like sqlite3_result_error_toobig().
   */
+  @Experimental
   public static native void sqlite3_result_nio_buffer(
     @NotNull sqlite3_context cx, @Nullable java.nio.ByteBuffer blob,
     int begin, int n
@@ -1816,6 +1857,7 @@ public final class CApi {
      Convenience overload which uses the whole input object
      as the result blob content.
   */
+  @Experimental
   public static void sqlite3_result_nio_buffer(
     @NotNull sqlite3_context cx, @Nullable java.nio.ByteBuffer blob
   ){
@@ -1920,6 +1962,7 @@ public final class CApi {
      Convenience overload which behaves like
      sqlite3_result_nio_buffer().
   */
+  @Experimental
   public static void sqlite3_result_blob(
     @NotNull sqlite3_context cx, @Nullable java.nio.ByteBuffer blob,
     int begin, int n
@@ -1931,6 +1974,7 @@ public final class CApi {
      Convenience overload which behaves like the two-argument overload of
      sqlite3_result_nio_buffer().
   */
+  @Experimental
   public static void sqlite3_result_blob(
     @NotNull sqlite3_context cx, @Nullable java.nio.ByteBuffer blob
   ){
@@ -2342,6 +2386,7 @@ public final class CApi {
      sqlite3_jni_supports_nio() is false, or if sqlite3_value_blob()
      would return null for the same input.
   */
+  @Experimental
   public static native java.nio.ByteBuffer sqlite3_value_nio_buffer(
     @NotNull sqlite3_value v
   );

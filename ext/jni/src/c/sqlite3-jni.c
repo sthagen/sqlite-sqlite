@@ -1995,13 +1995,16 @@ error_oom:
 
 /*
 ** Requires that jCx and jArgv are sqlite3_context
-** resp. array-of-sqlite3_value values initialized by udf_args(). This
+** resp. array-of-sqlite3_value values initialized by udf_args(). The
+** latter will be 0-and-NULL for UDF types with no arguments. This
 ** function zeroes out the nativePointer member of jCx and each entry
 ** in jArgv. This is a safety-net precaution to avoid undefined
-** behavior if a Java-side UDF holds a reference to one of its
-** arguments. This MUST be called from any function which successfully
-** calls udf_args(), after calling the corresponding UDF and checking
-** its exception status. It MUST NOT be called in any other case.
+** behavior if a Java-side UDF holds a reference to its context or one
+** of its arguments. This MUST be called from any function which
+** successfully calls udf_args(), after calling the corresponding UDF
+** and checking its exception status, or which Java-wraps a
+** sqlite3_context for use with a UDF(ish) call. It MUST NOT be called
+** in any other case.
 */
 static void udf_unargs(JNIEnv *env, jobject jCx, int argc, jobjectArray jArgv){
   int i = 0;
@@ -2009,8 +2012,29 @@ static void udf_unargs(JNIEnv *env, jobject jCx, int argc, jobjectArray jArgv){
   NativePointerHolder_set(S3JniNph(sqlite3_context), jCx, 0);
   for( ; i < argc; ++i ){
     jobject jsv = (*env)->GetObjectArrayElement(env, jArgv, i);
+    /*
+    ** There is a potential Java-triggerable case of Undefined
+    ** Behavior here, but it would require intentional misuse of the
+    ** API:
+    **
+    ** If a Java UDF grabs an sqlite3_value from its argv and then
+    ** assigns that element to null, it becomes unreachable to us so
+    ** we cannot clear out its pointer. That Java-side object's
+    ** getNativePointer() will then refer to a stale value, so passing
+    ** it into (e.g.) sqlite3_value_SOMETHING() would invoke UB.
+    **
+    ** High-level wrappers can avoid that possibility if they do not
+    ** expose sqlite3_value directly to clients (as is the case in
+    ** org.sqlite.jni.wrapper1.SqlFunction).
+    **
+    ** One potential (but expensive) workaround for this would be to
+    ** privately store a duplicate argv array in each sqlite3_context
+    ** wrapper object, and clear the native pointers from that copy.
+    */
     assert(jsv && "Someone illegally modified a UDF argument array.");
-    NativePointerHolder_set(S3JniNph(sqlite3_value), jsv, 0);
+    if( jsv ){
+      NativePointerHolder_set(S3JniNph(sqlite3_value), jsv, 0);
+    }
   }
 }
 
@@ -2099,6 +2123,7 @@ static int udf_xFV(sqlite3_context* cx, S3JniUdf * s,
       rc = udf_report_exception(env, isFinal, cx, s->zFuncName,
                                 zFuncType);
     }
+    udf_unargs(env, jcx, 0, 0);
     S3JniUnrefLocal(jcx);
   }else{
     if( isFinal ) sqlite3_result_error_nomem(cx);
@@ -3354,8 +3379,9 @@ S3JniApi(sqlite3_complete(),jint,1complete)(
   return rc;
 }
 
-S3JniApi(sqlite3_config() /*for a small subset of options.*/,
-         jint,1config__I)(JniArgsEnvClass, jint n){
+S3JniApi(sqlite3_config() /*for a small subset of options.*/
+         sqlite3_config__enable()/* internal name to avoid name-mangling issues*/,
+         jint,1config_1_1enable)(JniArgsEnvClass, jint n){
   switch( n ){
     case SQLITE_CONFIG_SINGLETHREAD:
     case SQLITE_CONFIG_MULTITHREAD:
@@ -3385,8 +3411,9 @@ static void s3jni_config_log(void *ignored, int errCode, const char *z){
   }
 }
 
-S3JniApi(sqlite3_config() /* for SQLITE_CONFIG_LOG */,
-         jint, 1config__Lorg_sqlite_jni_ConfigLogCallback_2
+S3JniApi(sqlite3_config() /* for SQLITE_CONFIG_LOG */
+         sqlite3_config__config_log() /* internal name */,
+         jint, 1config_1_1CONFIG_1LOG
 )(JniArgsEnvClass, jobject jLog){
   S3JniHook * const pHook = &SJG.hook.configlog;
   int rc = 0;
@@ -3460,9 +3487,10 @@ void sqlite3_init_sqllog(void){
 }
 #endif
 
-S3JniApi(sqlite3_config() /* for SQLITE_CONFIG_SQLLOG */,
-         jint, 1config__Lorg_sqlite_jni_ConfigSqllogCallback_2)(
-           JniArgsEnvClass, jobject jLog){
+S3JniApi(sqlite3_config() /* for SQLITE_CONFIG_SQLLOG */
+         sqlite3_config__SQLLOG() /*internal name*/,
+         jint, 1config_1_1SQLLOG
+)(JniArgsEnvClass, jobject jLog){
 #ifndef SQLITE_ENABLE_SQLLOG
   return SQLITE_MISUSE;
 #else
