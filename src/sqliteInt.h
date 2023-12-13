@@ -4177,6 +4177,9 @@ struct Sqlite3Config {
   u8 bSmallMalloc;                  /* Avoid large memory allocations if true */
   u8 bExtraSchemaChecks;            /* Verify type,name,tbl_name in schema */
   u8 bUseLongDouble;                /* Make use of long double */
+#ifdef SQLITE_DEBUG
+  u8 bJsonSelfcheck;                /* Double-check JSON parsing */
+#endif
   int mxStrlen;                     /* Maximum string length */
   int neverCorrupt;                 /* Database is always well-formed */
   int szLookaside;                  /* Default lookaside buffer size */
@@ -5168,6 +5171,7 @@ int sqlite3Utf16ByteLen(const void *pData, int nChar);
 #endif
 int sqlite3Utf8CharLen(const char *pData, int nByte);
 u32 sqlite3Utf8Read(const u8**);
+int sqlite3Utf8ReadLimited(const u8*, int, u32*);
 LogEst sqlite3LogEst(u64);
 LogEst sqlite3LogEstAdd(LogEst,LogEst);
 LogEst sqlite3LogEstFromDouble(double);
