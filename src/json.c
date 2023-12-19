@@ -374,6 +374,7 @@ static int jsonCacheInsert(
 
   assert( pParse->zJson!=0 );
   assert( pParse->bJsonIsRCStr );
+  assert( pParse->delta==0 );
   p = sqlite3_get_auxdata(ctx, JSON_CACHE_ID);
   if( p==0 ){
     sqlite3 *db = sqlite3_context_db_handle(ctx);
@@ -446,6 +447,7 @@ static JsonParse *jsonCacheSearch(
       p->a[p->nUsed-1] = tmp;
       i = p->nUsed - 1;
     }
+    assert( p->a[i]->delta==0 );
     return p->a[i];
   }else{
     return 0;
@@ -3039,13 +3041,29 @@ static int jsonFunctionArgToBlob(
       }
       break;
     }
-    case SQLITE_FLOAT:
+    case SQLITE_FLOAT: {
+      double r = sqlite3_value_double(pArg);
+      if( NEVER(sqlite3IsNaN(r)) ){
+        jsonBlobAppendNode(pParse, JSONB_NULL, 0, 0);
+      }else{
+        int n = sqlite3_value_bytes(pArg);
+        const char *z = (const char*)sqlite3_value_text(pArg);
+        if( z==0 ) return 1;
+        if( z[0]=='I' ){
+          jsonBlobAppendNode(pParse, JSONB_FLOAT, 5, "9e999");
+        }else if( z[0]=='-' && z[1]=='I' ){
+          jsonBlobAppendNode(pParse, JSONB_FLOAT, 6, "-9e999");
+        }else{
+          jsonBlobAppendNode(pParse, JSONB_FLOAT, n, z);
+        }
+      }
+      break;
+    }
     case SQLITE_INTEGER: {
       int n = sqlite3_value_bytes(pArg);
       const char *z = (const char*)sqlite3_value_text(pArg);
-      int e = eType==SQLITE_INTEGER ? JSONB_INT : JSONB_FLOAT;
       if( z==0 ) return 1;
-      jsonBlobAppendNode(pParse, e, n, z);
+      jsonBlobAppendNode(pParse, JSONB_INT, n, z);
       break;
     }
   }
@@ -3146,11 +3164,6 @@ jsonInsertIntoBlob_patherror:
   }
   return;
 }
-
-/*
-** Make a copy of a JsonParse object.  The copy will be editable.
-*/
-
 
 /*
 ** Generate a JsonParse object, containing valid JSONB in aBlob and nBlob,
@@ -3306,6 +3319,7 @@ static void jsonReturnParse(
   }else{
     JsonString s;
     jsonStringInit(&s, ctx);
+    p->delta = 0;
     jsonXlateBlobToText(p, 0, &s);
     jsonReturnString(&s, p, ctx);
     sqlite3_result_subtype(ctx, JSON_SUBTYPE);
