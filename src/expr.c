@@ -2740,9 +2740,10 @@ int sqlite3ExprCanBeNull(const Expr *p){
     case TK_COLUMN:
       assert( ExprUseYTab(p) );
       return ExprHasProperty(p, EP_CanBeNull) ||
-             p->y.pTab==0 ||  /* Reference to column of index on expression */
+             NEVER(p->y.pTab==0) ||  /* Reference to column of index on expr */
              (p->iColumn>=0
               && p->y.pTab->aCol!=0 /* Possible due to prior error */
+              && ALWAYS(p->iColumn<p->y.pTab->nCol)
               && p->y.pTab->aCol[p->iColumn].notNull==0);
     default:
       return 1;
@@ -5324,8 +5325,10 @@ void sqlite3ExprCode(Parse *pParse, Expr *pExpr, int target){
   inReg = sqlite3ExprCodeTarget(pParse, pExpr, target);
   if( inReg!=target ){
     u8 op;
-    if( ALWAYS(pExpr)
-     && (ExprHasProperty(pExpr,EP_Subquery) || pExpr->op==TK_REGISTER)
+    Expr *pX = sqlite3ExprSkipCollateAndLikely(pExpr);
+    testcase( pX!=pExpr );
+    if( ALWAYS(pX)
+     && (ExprHasProperty(pX,EP_Subquery) || pX->op==TK_REGISTER)
     ){
       op = OP_Copy;
     }else{
@@ -6473,7 +6476,7 @@ static int exprRefToSrcList(Walker *pWalker, Expr *pExpr){
     int i;
     struct RefSrcList *p = pWalker->u.pRefSrcList;
     SrcList *pSrc = p->pRef;
-    int nSrc = pSrc ? pSrc->nSrc : 0;
+    int nSrc = ALWAYS(pSrc) ? pSrc->nSrc : 0;
     for(i=0; i<nSrc; i++){
       if( pExpr->iTable==pSrc->a[i].iCursor ){
         pWalker->eCode |= 1;
