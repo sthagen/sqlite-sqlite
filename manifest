@@ -1,5 +1,5 @@
-C Fix\sa\sproblem\sin\sthe\sshell\stool\s(not\slibrary)\scausing\san\sout-of-bounds\swrite\sif\san\s".open"\scommand\sfailed,\sthen\sthe\suser\spressed\sctrl-c\sto\sinterrupt\sa\squery\srunning\son\sthe\ssubstitute\sin-memory\sdatabase.
-D 2023-12-27T16:24:53.514
+C Enable\sSQLITE_DIRECT_OVERFLOW_READ\sunless\sit\sis\sspecifically\sdisabled\susing\nthe\s-DSQLITE_DIRECT_OVERFLOW_READ=0\scompile-time\soption.
+D 2023-12-28T21:02:08.508
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -95,7 +95,7 @@ F ext/fts5/fts5Int.h defa43c0932265138ee910ca416e6baccf8b774e0f3d610e74be1ab2880
 F ext/fts5/fts5_aux.c 4584e88878e54828bf7d4d0d83deedd232ec60628b7731be02bad6adb62304b1
 F ext/fts5/fts5_buffer.c 0eec58bff585f1a44ea9147eae5da2447292080ea435957f7488c70673cb6f09
 F ext/fts5/fts5_config.c 8072a207034b51ae9b7694121d1b5715c794e94b275e088f70ae532378ca5cdf
-F ext/fts5/fts5_expr.c e5fb9dd9e31e9e6ae9604bdb0d183ecec720964f3b974fc37c43ce73d8833d6d
+F ext/fts5/fts5_expr.c e91156ebdcc08d837f4f324168f69f3c0d7fdef0e521fd561efb48ef3297b696
 F ext/fts5/fts5_hash.c adda4272be401566a6e0ba1acbe70ee5cb97fce944bc2e04dc707152a0ec91b1
 F ext/fts5/fts5_index.c bb1965c3965f6fe5f64160bf1c0694a9684a790a783f293a76da1d38d319b258
 F ext/fts5/fts5_main.c 93e5bc8676dbaaec365576d26cdafc5c21f0052f8f68b86ee4de22237c2e2143
@@ -195,7 +195,7 @@ F ext/fts5/test/fts5optimize3.test bf9c91bb927d0fb2b9a06318a217a0419183ac5913842
 F ext/fts5/test/fts5origintext.test d2796fa08ee7aecfabdc0c45bb8a2fb16a00ea8757e63fbc153b718dbe430a39
 F ext/fts5/test/fts5origintext2.test f3b9436de540828d01f0672df855b09ebc0863e126d5b56234701d71dfa73634
 F ext/fts5/test/fts5origintext3.test 0d25933506600452a5ab3873cbb418ed5f2de2446c3672b9997b1ea104b0e7f0
-F ext/fts5/test/fts5origintext4.test a33e8f64b9762e0e0c722ac2b301017e1d7745635724c1ca04b2c010b451fab4
+F ext/fts5/test/fts5origintext4.test 0c4e4514b68d9ddb15e5a538d9d234da85747a3fd62432265dbdba5c8708e457
 F ext/fts5/test/fts5origintext5.test a037bdf7235a22033c4663837bdb12d9738245464a3ac2f60c71fc40d07ede7d
 F ext/fts5/test/fts5phrase.test 13e5d8e9083077b3d9c74315b3c92ec723cc6eb37c8155e0bfe1bba00559f07b
 F ext/fts5/test/fts5plan.test b65cfcca9ddd6fdaa118c61e17aeec8e8433bc5b6bb307abd116514f79c49c5a
@@ -697,7 +697,7 @@ F src/hash.h 3340ab6e1d13e725571d7cee6d3e3135f0779a7d8e76a9ce0a85971fa3953c51
 F src/hwtime.h f9c2dfb84dce7acf95ce6d289e46f5f9d3d1afd328e53da8f8e9008e3b3caae6
 F src/in-operator.md 10cd8f4bcd225a32518407c2fb2484089112fd71
 F src/insert.c 3f0a94082d978bbdd33c38fefea15346c6c6bffb70bc645a71dc0f1f87dd3276
-F src/json.c bc90605da937ca0cd72ff0492216fbb38fd8f9025e6344499f9db235be98e36f
+F src/json.c a84de35816b8aebf6a97e08887cce486c0591d0b6147088fa888325f0c17f9ef
 F src/legacy.c d7874bc885906868cd51e6c2156698f2754f02d9eee1bae2d687323c3ca8e5aa
 F src/loadext.c 7432c944ff197046d67a1207790a1b13eec4548c85a9457eb0896bb3641dfb36
 F src/main.c ce714ee501122c76eb2e69b292bebe443aba611fc3b88e6786eb910285515fe4
@@ -742,7 +742,7 @@ F src/shell.c.in 85f8d52fa4f7773823736dd39d0a268fd739207fcae95883c9ec8ce4af59f7d
 F src/sqlite.h.in 61a60b4ea04db8ead15e1579b20b64cb56e9f55d52c5f9f9694de630110593a3
 F src/sqlite3.rc 5121c9e10c3964d5755191c80dd1180c122fc3a8
 F src/sqlite3ext.h 3f046c04ea3595d6bfda99b781926b17e672fd6d27da2ba6d8d8fc39981dcb54
-F src/sqliteInt.h 134457f62bb1d0ff1dd037cc23dd46b1d16efbbfc2211dc2b15c380af731d9ac
+F src/sqliteInt.h 4552ac3dbe5be857817cff0855cdabbd20db0252739f463b5a193117c8880a02
 F src/sqliteLimit.h 33b1c9baba578d34efe7dfdb43193b366111cdf41476b1e82699e14c11ee1fb6
 F src/status.c cb11f8589a6912af2da3bb1ec509a94dd8ef27df4d4c1a97e0bcf2309ece972b
 F src/table.c 0f141b58a16de7e2fbe81c308379e7279f4c6b50eb08efeec5892794a0ba30d1
@@ -2156,8 +2156,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P 1a8a9b1c89519d265869251e8b6d3c5db733f0d3a7dea6c7962811a8f1157dff
-R 9be7ded4b93fb872773060703710555e
-U dan
-Z 20de7b64b135a6b7a6b0796593663512
+P 15ed002aed12556aeb9bbe537c4ba839f0c95bac65a69d03401b37cc3fd11b92
+R dd6052667512259356a7715bc34535d0
+U drh
+Z 55f29f3b5d27fdb56a096a8d4f3db641
 # Remove this line to create a well-formed Fossil manifest.
