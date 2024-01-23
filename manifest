@@ -1,5 +1,5 @@
-C Make\sCLI\s.dump\simmune\sto\spragma\sreverse_unordered_selects,\sas\sreported\sin\s[forum:/forumpost/c42be01880e961eb|Forum\sthread\s"Missing\sORDER\sBY\sin\s.dump?"]
-D 2024-01-22T01:11:24.847
+C The\s-DSQLITE_JSON_BLOB_INPUT_BUG_COMPATIBLE\scompile-time\soption\scauses\sblob\ninputs\sto\sJSON\sfunctions\sthat\sare\snot\sJSONB\sto\sbe\sprocessed\sas\sif\sthey\nwhere\stext,\simmulating\shistorical\sbugging\sbehavior\swhich\ssome\sapplications\nhave\scome\sto\srely\supon.\s\sSee\n[forum:/forumpost/012136abd5292b8d|forum\sthread\s012136abd5292b8d]\sfor\ndiscussion.
+D 2024-01-22T14:16:10.354
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -572,7 +572,7 @@ F ext/session/sqlite3session.c 829d468f0f3d2710aace56b0116a7ca3f414683ce78e3125a
 F ext/session/sqlite3session.h 4cf19a51975746d7cff2fdd74db8b769c570958e1c3639ac150d824ac1553b3e
 F ext/session/test_session.c 7b94ad945cd4afe6c73ee935aeb3d44b4446186e1729362af616c7695a5283d9
 F ext/userauth/sqlite3userauth.h 7f3ea8c4686db8e40b0a0e7a8e0b00fac13aa7a3
-F ext/userauth/user-auth.txt e6641021a9210364665fe625d067617d03f27b04
+F ext/userauth/user-auth.txt ca7e9ee82ca4e1c1744295f8184dd70edfae1992865d26c64303f539eb6c084c
 F ext/userauth/userauth.c 7f00cded7dcaa5d47f54539b290a43d2e59f4b1eb5f447545fa865f002fc80cb
 F ext/wasm/EXPORTED_FUNCTIONS.fiddle.in 27450c8b8c70875a260aca55435ec927068b34cef801a96205adb81bdcefc65c
 F ext/wasm/GNUmakefile 867c903a27fa0d53a3bf1b01d8c7bb713456f87e0939c3cac9f07faa68f58734
@@ -680,7 +680,7 @@ F src/btmutex.c 79a43670447eacc651519a429f6ece9fd638563cf95b469d6891185ddae2b522
 F src/btree.c dee25e097b749275333b55d64a5ffc079249576f8e88a2ee476468cf67510f4b
 F src/btree.h 03e3356f5208bcab8eed4e094240fdac4a7f9f5ddf5e91045ce589f67d47c240
 F src/btreeInt.h 3e2589726c4f105e653461814f65857465da68be1fac688de340c43b873f4062
-F src/build.c e7d9044592eeeea8e78d8ae53ca8d31fd6e92ca0d4f53e2f2e8ccf7352e0b04b
+F src/build.c 05c9eb387638982092988d2ef4c00a91b0c29baa1b85923f082ce0cf2903ea7e
 F src/callback.c db3a45e376deff6a16c0058163fe0ae2b73a2945f3f408ca32cf74960b28d490
 F src/complete.c a3634ab1e687055cd002e11b8f43eb75c17da23e
 F src/ctime.c 23331529e654be40ca97d171cbbffe9b3d4c71cc53b78fe5501230675952da8b
@@ -698,7 +698,7 @@ F src/hash.h 3340ab6e1d13e725571d7cee6d3e3135f0779a7d8e76a9ce0a85971fa3953c51
 F src/hwtime.h f9c2dfb84dce7acf95ce6d289e46f5f9d3d1afd328e53da8f8e9008e3b3caae6
 F src/in-operator.md 10cd8f4bcd225a32518407c2fb2484089112fd71
 F src/insert.c 3f0a94082d978bbdd33c38fefea15346c6c6bffb70bc645a71dc0f1f87dd3276
-F src/json.c 5405e50cf0d7aeae12ac5b46e0fc9b3757b3b9cb4885f1a73ec7afeac99b9759
+F src/json.c 99f2825b44327811bdf47808e57077388b83bcc6a253c1269d13fd1b3237138d
 F src/legacy.c d7874bc885906868cd51e6c2156698f2754f02d9eee1bae2d687323c3ca8e5aa
 F src/loadext.c 7432c944ff197046d67a1207790a1b13eec4548c85a9457eb0896bb3641dfb36
 F src/main.c 438b95162acfa17b7d218f586f5bde11d6ae82bcf030c9611fc537556870ad6b
@@ -743,7 +743,7 @@ F src/shell.c.in 5ea8c6b0057bfe3bcdff31949fe72aa231ae429047c421ea1b168af6825a489
 F src/sqlite.h.in 61a60b4ea04db8ead15e1579b20b64cb56e9f55d52c5f9f9694de630110593a3
 F src/sqlite3.rc 5121c9e10c3964d5755191c80dd1180c122fc3a8
 F src/sqlite3ext.h 3f046c04ea3595d6bfda99b781926b17e672fd6d27da2ba6d8d8fc39981dcb54
-F src/sqliteInt.h 73800d73e21180e6b3df8d0fe7d11758dc24367fd2b0b0075b48fc116de406bb
+F src/sqliteInt.h 03e64e4a973f56035772421e94be7bf092ceceeb3dc91a74a2147030a822c392
 F src/sqliteLimit.h 6878ab64bdeb8c24a1d762d45635e34b96da21132179023338c93f820eee6728
 F src/status.c cb11f8589a6912af2da3bb1ec509a94dd8ef27df4d4c1a97e0bcf2309ece972b
 F src/table.c 0f141b58a16de7e2fbe81c308379e7279f4c6b50eb08efeec5892794a0ba30d1
@@ -1355,7 +1355,7 @@ F test/like2.test d3be15fefee3e02fc88942a9b98f26c5339bbdef7783c90023c092c4955fe3
 F test/like3.test a76e5938fadbe6d32807284c796bafd869974a961057bc5fc5a28e06de98745c
 F test/limit.test 350f5d03c29e7dff9a2cde016f84f8d368d40bcd02fa2b2a52fa10c4bf3cbfaf
 F test/limit2.test 9409b033284642a859fafc95f29a5a6a557bd57c1f0d7c3f554bd64ed69df77e
-F test/literal.test 12e3c865a9e20f984240dbfb362be2a53ad5ca4ee25a6d429cf059115a9ac48f
+F test/literal.test d0a72ab5afe525da7b5f0d2e11df7a369e8021f98de90da4352b8634dba9ccaf
 F test/loadext.test faa4f6eed07a5aac35d57fdd7bc07f8fc82464cfd327567c10cf0ba3c86cde04
 F test/loadext2.test 0408380b57adca04004247179837a18e866a74f7
 F test/lock.test be4fe08118fb988fed741f429b7dd5d65e1c90db
@@ -2159,8 +2159,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P 382a8f94bffef3e5f715116e363a30e21e2c53cd42d4959dfbe90c4624143e6d
-R 0c3ae1bf61b2c5523c6e506b1fe8b74c
-U larrybr
-Z df2931d680c73052f2016399cfecfafe
+P 4dc00f577632c7b13135505007804d42a12f81a9ebd58d4c380727256b054b7e
+R 59af26cba445671768ccc033868954ad
+U drh
+Z 9f8b0dd9fdc4264b889c936f6659e28d
 # Remove this line to create a well-formed Fossil manifest.
