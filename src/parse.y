@@ -21,6 +21,10 @@
 */
 }
 
+// Function used to enlarge the parser stack, if needed
+%realloc parserStackRealloc
+%free    sqlite3_free
+
 // All token codes are small integers with #defines that begin with "TK_"
 %token_prefix TK_
 
@@ -45,7 +49,7 @@
   }
 }
 %stack_overflow {
-  sqlite3ErrorMsg(pParse, "parser stack overflow");
+  sqlite3OomFault(pParse->db);
 }
 
 // The name of the generated procedure that implements the parser
@@ -546,6 +550,14 @@ cmd ::= select(X).  {
       sqlite3WithDelete(pParse->db, pWith);
     }
     return pSelect;
+  }
+
+  /* Memory allocator for parser stack resizing.  This is a thin wrapper around
+  ** sqlite3_realloc() that includes a call to sqlite3FaultSim() to facilitate
+  ** testing.
+  */
+  static void *parserStackRealloc(void *pOld, sqlite3_uint64 newSize){
+    return sqlite3FaultSim(700) ? 0 : sqlite3_realloc(pOld, newSize);
   }
 }
 
