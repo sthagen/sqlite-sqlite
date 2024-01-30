@@ -2073,8 +2073,8 @@ static u32 jsonbPayloadSize(const JsonParse *pParse, u32 i, u32 *pSz){
          (pParse->aBlob[i+7]<<8) + pParse->aBlob[i+8];
     n = 9;
   }
-  if( i+sz+n > pParse->nBlob
-   && i+sz+n > pParse->nBlob-pParse->delta
+  if( (i64)i+sz+n > pParse->nBlob
+   && (i64)i+sz+n > pParse->nBlob-pParse->delta
   ){
     sz = 0;
     n = 0;
@@ -2124,6 +2124,7 @@ static u32 jsonTranslateBlobToText(
     }
     case JSONB_INT:
     case JSONB_FLOAT: {
+      if( sz==0 ) goto malformed_jsonb;
       jsonAppendRaw(pOut, (const char*)&pParse->aBlob[i+n], sz);
       break;
     }
@@ -2132,6 +2133,7 @@ static u32 jsonTranslateBlobToText(
       sqlite3_uint64 u = 0;
       const char *zIn = (const char*)&pParse->aBlob[i+n];
       int bOverflow = 0;
+      if( sz==0 ) goto malformed_jsonb;
       if( zIn[0]=='-' ){
         jsonAppendChar(pOut, '-');
         k++;
@@ -2154,6 +2156,7 @@ static u32 jsonTranslateBlobToText(
     case JSONB_FLOAT5: { /* Float literal missing digits beside "." */
       u32 k = 0;
       const char *zIn = (const char*)&pParse->aBlob[i+n];
+      if( sz==0 ) goto malformed_jsonb;
       if( zIn[0]=='-' ){
         jsonAppendChar(pOut, '-');
         k++;
@@ -2267,10 +2270,11 @@ static u32 jsonTranslateBlobToText(
       jsonAppendChar(pOut, '[');
       j = i+n;
       iEnd = j+sz;
-      while( j<iEnd ){
+      while( j<iEnd && pOut->eErr==0 ){
         j = jsonTranslateBlobToText(pParse, j, pOut);
         jsonAppendChar(pOut, ',');
       }
+      if( j>iEnd ) pOut->eErr |= JSTRING_MALFORMED;
       if( sz>0 ) jsonStringTrimOneChar(pOut);
       jsonAppendChar(pOut, ']');
       break;
@@ -2280,17 +2284,18 @@ static u32 jsonTranslateBlobToText(
       jsonAppendChar(pOut, '{');
       j = i+n;
       iEnd = j+sz;
-      while( j<iEnd ){
+      while( j<iEnd && pOut->eErr==0 ){
         j = jsonTranslateBlobToText(pParse, j, pOut);
         jsonAppendChar(pOut, (x++ & 1) ? ',' : ':');
       }
-      if( x & 1 ) pOut->eErr |= JSTRING_MALFORMED;
+      if( (x & 1)!=0 || j>iEnd ) pOut->eErr |= JSTRING_MALFORMED;
       if( sz>0 ) jsonStringTrimOneChar(pOut);
       jsonAppendChar(pOut, '}');
       break;
     }
 
     default: {
+      malformed_jsonb:
       pOut->eErr |= JSTRING_MALFORMED;
       break;
     }
