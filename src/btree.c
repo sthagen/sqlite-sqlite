@@ -10914,6 +10914,7 @@ static int checkTreePage(
         btreeHeapInsert(heap, (pc<<16)|(pc+size-1));
       }
     }
+    assert( heap!=0 );
     /* Add the freeblocks to the min-heap
     **
     ** EVIDENCE-OF: R-20690-50594 The second field of the b-tree page header
@@ -11027,7 +11028,9 @@ int sqlite3BtreeIntegrityCheck(
   int bPartial = 0;            /* True if not checking all btrees */
   int bCkFreelist = 1;         /* True to scan the freelist */
   VVA_ONLY( int nRef );
+
   assert( nRoot>0 );
+  assert( aCnt!=0 );
 
   /* aRoot[0]==0 means this is a partial check */
   if( aRoot[0]==0 ){
@@ -11101,7 +11104,7 @@ int sqlite3BtreeIntegrityCheck(
   pBt->db->flags &= ~(u64)SQLITE_CellSizeCk;
   for(i=0; (int)i<nRoot && sCheck.mxErr; i++){
     sCheck.nRow = 0;
-    if( aRoot[i] && sCheck.mxErr ){
+    if( aRoot[i] ){
       i64 notUsed;
 #ifndef SQLITE_OMIT_AUTOVACUUM
       if( pBt->autoVacuum && aRoot[i]>1 && !bPartial ){
@@ -11111,9 +11114,7 @@ int sqlite3BtreeIntegrityCheck(
       sCheck.v0 = aRoot[i];
       checkTreePage(&sCheck, aRoot[i], &notUsed, LARGEST_INT64);
     }
-    if( aCnt ){
-      sqlite3MemSetArrayInt64(aCnt, i, sCheck.nRow);
-    }
+    sqlite3MemSetArrayInt64(aCnt, i, sCheck.nRow);
   }
   pBt->db->flags = savedDbFlags;
 
