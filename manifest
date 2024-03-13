@@ -1,5 +1,5 @@
-C Have\stestrunner.tcl\shave\seach\stest\sstore\sits\stemp\sfiles\sin\sits\sworking\sdirectory.\sTo\savoid\sunlikely,\sbut\spossible,\scollisions.
-D 2024-03-12T18:33:57.893
+C Minor\schange\sto\sthe\s"mdevtest"\sand\s"sdevtest"\sin\stestrunner.tcl,\sto\smake\sit\neasier\sto\sadd\sconfigurations\sin\sbranches.
+D 2024-03-13T16:32:05.539
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -44,7 +44,7 @@ F doc/json-enhancements.md e356fc834781f1f1aa22ee300027a270b2c960122468499bf347b
 F doc/jsonb.md 5fab4b8613aa9153fbeb6259297bd4697988af8b3d23900deba588fa7841456b
 F doc/lemon.html 8b266ff711d2ec7f867c3dca37634963f48a630329908cc282beebfa8c708706
 F doc/pager-invariants.txt 27fed9a70ddad2088750c4a2b493b63853da2710
-F doc/testrunner.md 8d36ec692cf4994bb66d84a4645b9afa1ce9d47dc12cbf8d437c5a5fb6ddeedb
+F doc/testrunner.md 15583cf8c7d8a1c3378fd5d4319ca769a14c4d950a5df9b015d01d5be290dc69
 F doc/trusted-schema.md 33625008620e879c7bcfbbfa079587612c434fa094d338b08242288d358c3e8a
 F doc/vdbesort-memory.md 4da2639c14cd24a31e0af694b1a8dd37eaf277aff3867e9a8cc14046bc49df56
 F doc/vfs-shm.txt e101f27ea02a8387ce46a05be2b1a902a021d37a
@@ -1687,8 +1687,8 @@ F test/temptable2.test 76821347810ecc88203e6ef0dd6897b6036ac788e9dd3e6b04fd4d163
 F test/temptable3.test d11a0974e52b347e45ee54ef1923c91ed91e4637
 F test/temptrigger.test 38f0ca479b1822d3117069e014daabcaacefffcc
 F test/tester.tcl fe617b88c7eb08bdf983d2aaa31c20fbf439eee7b8e0d61ca636fcd0c305bbbf
-F test/testrunner.tcl 9fb1341f4a3fcc169b0cffa2f319abde197a738d98131d178a81509a0638f2df
-F test/testrunner_data.tcl 7ffd951527bbc614e723fd8d123b6834321878530696adecfdf6035100bac64e
+F test/testrunner.tcl 9f198e41c0d8899d547a5beb4af0c0d512021d18da136918dd96be6a242dbab5
+F test/testrunner_data.tcl 2f94974e5e3a56af880be72f7a7fd239aa9d4ecf978625435fcc698319c927fa
 F test/thread001.test a0985c117eab62c0c65526e9fa5d1360dd1cac5b03bde223902763274ce21899
 F test/thread002.test c24c83408e35ba5a952a3638b7ac03ccdf1ce4409289c54a050ac4c5f1de7502
 F test/thread003.test ee4c9efc3b86a6a2767516a37bd64251272560a7
@@ -2177,9 +2177,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P 7805844bc4433ae088dae6d54eb972e082c5a3df06e844cfc8b69e7d97aeb432 775a10d10b9bf2227071e778718ba4054d4b2b4238751eb147338d687b4e0d58
-R 9fe0d14be342ac1becb45016c9700f68
-T +closed 775a10d10b9bf2227071e778718ba4054d4b2b4238751eb147338d687b4e0d58
-U dan
-Z d2698b4f4cd69108bc3174c8dffaf5d3
+P 924281b94d8e6ba674d6fe2f7f01da890351355a854e9e6fe623fad1180f7392
+R 92509b8a5762b034ecb1ec5b7039a632
+U drh
+Z 644a950afdac6e39b6751ae1898b20f1
 # Remove this line to create a well-formed Fossil manifest.
