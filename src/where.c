@@ -840,6 +840,40 @@ static int constraintCompatibleWithOuterJoin(
   return 1;
 }
 
+#ifndef SQLITE_OMIT_AUTOMATIC_INDEX
+/*
+** Return true if column iCol of table pTab seem like it might be a
+** good column to use as part of a query-time index.
+**
+** Current algorithm (subject to improvement!):
+**
+**   1.   If iCol is already the left-most column of some other index,
+**        then return false.
+**
+**   2.   If iCol is part of an existing index that has an aiRowLogEst of
+**        more than 20, then return false.
+**
+**   3.   If no disqualifying conditions above are found, return true.
+*/
+static SQLITE_NOINLINE int columnIsGoodIndexCandidate(
+  const Table *pTab,
+  int iCol
+){
+  const Index *pIdx;
+  for(pIdx = pTab->pIndex; pIdx!=0; pIdx=pIdx->pNext){
+    int j;
+    for(j=0; j<pIdx->nKeyCol; j++){
+       if( pIdx->aiColumn[j]==iCol ){
+         if( j==0 ) return 0;
+         if( pIdx->hasStat1 && pIdx->aiRowLogEst[j+1]>20 ) return 0;
+         break;
+       }
+    }
+  }
+  return 1;
+}
+#endif /* SQLITE_OMIT_AUTOMATIC_INDEX */
+
 
 
 #ifndef SQLITE_OMIT_AUTOMATIC_INDEX
@@ -854,6 +888,8 @@ static int termCanDriveIndex(
   const Bitmask notReady         /* Tables in outer loops of the join */
 ){
   char aff;
+  int leftCol;
+  
   if( pTerm->leftCursor!=pSrc->iCursor ) return 0;
   if( (pTerm->eOperator & (WO_EQ|WO_IS))==0 ) return 0;
   assert( (pSrc->fg.jointype & JT_RIGHT)==0 );
@@ -864,11 +900,12 @@ static int termCanDriveIndex(
   }
   if( (pTerm->prereqRight & notReady)!=0 ) return 0;
   assert( (pTerm->eOperator & (WO_OR|WO_AND))==0 );
-  if( pTerm->u.x.leftColumn<0 ) return 0;
-  aff = pSrc->pTab->aCol[pTerm->u.x.leftColumn].affinity;
+  leftCol = pTerm->u.x.leftColumn;
+  if( leftCol<0 ) return 0;
+  aff = pSrc->pTab->aCol[leftCol].affinity;
   if( !sqlite3IndexAffinityOk(pTerm->pExpr, aff) ) return 0;
   testcase( pTerm->pExpr->op==TK_IS );
-  return 1;
+  return columnIsGoodIndexCandidate(pSrc->pTab, leftCol);
 }
 #endif
 
@@ -5242,10 +5279,16 @@ static int wherePathSolver(WhereInfo *pWInfo, LogEst nRowEst){
 
   pParse = pWInfo->pParse;
   nLoop = pWInfo->nLevel;
-  /* TUNING: For simple queries, only the best path is tracked.
-  ** For 2-way joins, the 5 best paths are followed.
-  ** For joins of 3 or more tables, track the 10 best paths */
-  mxChoice = (nLoop<=1) ? 1 : (nLoop==2 ? 5 : 10);
+  /* TUNING: mxChoice is the maximum number of possible paths to preserve
+  ** at each step.  Based on the number of loops in the FROM clause:
+  **
+  **     nLoop      mxChoice
+  **     -----      --------
+  **       1            1            // the most common case
+  **       2            5
+  **       3+          20
+  */
+  mxChoice = (nLoop<=1) ? 1 : (nLoop==2 ? 5 : 20);
   assert( nLoop<=pWInfo->pTabList->nSrc );
   WHERETRACE(0x002, ("---- begin solver.  (nRowEst=%d, nQueryLoop=%d)\n",
                      nRowEst, pParse->nQueryLoop));
@@ -5492,16 +5535,28 @@ static int wherePathSolver(WhereInfo *pWInfo, LogEst nRowEst){
 
 #ifdef WHERETRACE_ENABLED  /* >=2 */
     if( sqlite3WhereTrace & 0x02 ){
+      LogEst rMin, rFloor = 0;
+      int nDone = 0;
       sqlite3DebugPrintf("---- after round %d ----\n", iLoop);
-      for(ii=0, pTo=aTo; ii<nTo; ii++, pTo++){
-        sqlite3DebugPrintf(" %s cost=%-3d nrow=%-3d order=%c",
-           wherePathName(pTo, iLoop+1, 0), pTo->rCost, pTo->nRow,
-           pTo->isOrdered>=0 ? (pTo->isOrdered+'0') : '?');
-        if( pTo->isOrdered>0 ){
-          sqlite3DebugPrintf(" rev=0x%llx\n", pTo->revLoop);
-        }else{
-          sqlite3DebugPrintf("\n");
+      while( nDone<nTo ){
+        rMin = 0x7fff;
+        for(ii=0, pTo=aTo; ii<nTo; ii++, pTo++){
+          if( pTo->rCost>rFloor && pTo->rCost<rMin ) rMin = pTo->rCost;
         }
+        for(ii=0, pTo=aTo; ii<nTo; ii++, pTo++){
+          if( pTo->rCost==rMin ){
+            sqlite3DebugPrintf(" %s cost=%-3d nrow=%-3d order=%c",
+               wherePathName(pTo, iLoop+1, 0), pTo->rCost, pTo->nRow,
+               pTo->isOrdered>=0 ? (pTo->isOrdered+'0') : '?');
+            if( pTo->isOrdered>0 ){
+              sqlite3DebugPrintf(" rev=0x%llx\n", pTo->revLoop);
+            }else{
+              sqlite3DebugPrintf("\n");
+            }
+            nDone++;
+          }
+        }
+        rFloor = rMin;
       }
     }
 #endif
