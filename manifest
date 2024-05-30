@@ -1,5 +1,5 @@
-C Fix\sa\scouple\sof\sassert()\sstatements\sso\sthat\sthey\scannot\sfire\nwhen\sthe\sSQLITE_TESTCTRL_INTERNAL_FUNCTIONS\sdebugging\scapability\nis\sactivated.\s\sdbsqlfuzz\sf5b347cf167a62fbe08062b2feee65cb9306e363.
-D 2024-05-28T19:08:18.051
+C Ensure\sthat\sthe\ssecond\spass\scall\sto\swherePathSolver()\salways\sreports\sa\spositive\nvalue\sfor\sthe\sestimated\snumber\sof\soutput\srows.\s\sThis\sfixes\sa\slong-standing\n(though\sexceedingly\sminor)\sproblem\sthat\swas\sonly\srevealed\sby\sa\snew\sassert()\nadded\syesterday.\s\sdbsqlfuzz\s545d6debc2da496ab2b915e33ea34d9a35a935df
+D 2024-05-30T13:27:29.661
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -96,7 +96,7 @@ F ext/fts5/fts5.h 8856e11a5f0269cd346754cea0765efe8089635b80cad3222e8bfdb08cd534
 F ext/fts5/fts5Int.h 407ee36addad0ae6df5d37a811f0bd509ab6708b29640884ed5c7509e5f75143
 F ext/fts5/fts5_aux.c 4584e88878e54828bf7d4d0d83deedd232ec60628b7731be02bad6adb62304b1
 F ext/fts5/fts5_buffer.c 0eec58bff585f1a44ea9147eae5da2447292080ea435957f7488c70673cb6f09
-F ext/fts5/fts5_config.c 74093394dc26750becc302922e5fe308a8597a70e6e83e66c892242952468163
+F ext/fts5/fts5_config.c 1ae512e7374caca6ab250055b3b29e46b007a27b098eafcc7ff4d13b06228cee
 F ext/fts5/fts5_expr.c 85789f6fb01995f2578b60a360057ed754335a890b1ab2e57e238b3670a9ae6c
 F ext/fts5/fts5_hash.c adda4272be401566a6e0ba1acbe70ee5cb97fce944bc2e04dc707152a0ec91b1
 F ext/fts5/fts5_index.c ee0f4d50bc0c58a7c5ef7d645e7e38e1e59315b8ea9d722ae00c5f949ee65379
@@ -756,7 +756,7 @@ F src/random.c 606b00941a1d7dd09c381d3279a058d771f406c5213c9932bbd93d5587be4b9c
 F src/resolve.c 22f1fa3423b377c02ae78d451cfeb1c2d96dcf0389c0642cbdcd19d3bfd7ae01
 F src/rowset.c 8432130e6c344b3401a8874c3cb49fefe6873fec593294de077afea2dce5ec97
 F src/select.c cbdaf9cb2d9a697ee9ce1484f27d2e96762d33cc19259aedfb818a68b9d3be10
-F src/shell.c.in cba809572972ff736aa6c3423ffb87015c740864206d97e168bb77316129015f
+F src/shell.c.in a4d5957a853d6065549a1f2d8f46ded9940f72835e0328bbad292560f36b4d45
 F src/sqlite.h.in 892d0c427608ad7128a0fe44e972d6c4197225f5077f64f07792ffa44c6ecd77
 F src/sqlite3.rc 5121c9e10c3964d5755191c80dd1180c122fc3a8
 F src/sqlite3ext.h 3f046c04ea3595d6bfda99b781926b17e672fd6d27da2ba6d8d8fc39981dcb54
@@ -840,8 +840,8 @@ F src/vxworks.h d2988f4e5a61a4dfe82c6524dd3d6e4f2ce3cdb9
 F src/wal.c 887fc4ca3f020ebb2e376f222069570834ac63bf50111ef0cbf3ae417048ed89
 F src/wal.h ba252daaa94f889f4b2c17c027e823d9be47ce39da1d3799886bbd51f0490452
 F src/walker.c 7c7ea0115345851c3da4e04e2e239a29983b61fb5b038b94eede6aba462640e2
-F src/where.c 692d3d72c6d616c03aae0864366deffc367ddd8b428ec8eb41223f40afe3e2f5
-F src/whereInt.h 82a13766f13d1a53b05387c2e60726289ef26404bc7b9b1f7770204d97357fb8
+F src/where.c 5ddff7d4e0c0f7a2616efc126e4b8224387ce5fa4f5adf0737c8daa3e83824cf
+F src/whereInt.h 002adc3aa2cc10733b9b27958fdbe893987cd989fab25a9853941c1f9b9b0a65
 F src/wherecode.c d5184620bcb5265d59072cb66e1386bfe0331a9ce7614286f9ab79a4fcd00fb8
 F src/whereexpr.c 67d15caf88a1a9528283d68ff578e024cf9fe810b517bb0343e5aaf695ad97dd
 F src/window.c 5d95122dd330bfaebd732358c8ef067c5a9394a53ac249470d611d0ce2c52be2
@@ -1661,6 +1661,7 @@ F test/spellfix4.test 51c7c26514ade169855c66bcf130bd5acfb4d7fd090cc624645ab275ae
 F test/sqldiff1.test 1b7ab4f312442c5cc6b3a5f299fa8ca051416d1dd173cb1126fd51bf64f2c3fb
 F test/sqllimits1.test dee96a51b83ef866d06ec3c687d4c951d97b02549facc5be88c9dfcb215b98bf
 F test/sqllog.test 6af6cb0b09f4e44e1917e06ce85be7670302517a
+F test/starschema1.test a84205f97fe278a015ac39546c86b97228d22043af28f3a2ef809e8d5637ce1d
 F test/startup.c 1beb5ca66fcc0fce95c3444db9d1674f90fc605499a574ae2434dcfc10d22805
 F test/stat.test 123212a20ceb496893d5254a5f6c76442ce549fdc08d1702d8288a2bbaac8408
 F test/statfault.test 064f43379e4992b5221b7d9ac887c313b3191f85cce605d78e416fc4045da64e
@@ -2154,7 +2155,7 @@ F tool/speedtest8.c 2902c46588c40b55661e471d7a86e4dd71a18224
 F tool/speedtest8inst1.c 7ce07da76b5e745783e703a834417d725b7d45fd
 F tool/spellsift.tcl 52b4b04dc4333c7ab024f09d9d66ed6b6f7c6eb00b38497a09f338fa55d40618 x
 F tool/split-sqlite3c.tcl 5aa60643afca558bc732b1444ae81a522326f91e1dc5665b369c54f09e20de60
-F tool/sqldiff.c 985452ffc8554baee0f945d078859d393a22abc0bbf553a9f12acae1b6e1fdd0
+F tool/sqldiff.c 1e0a2c264c2ad5aca745d35deee3c7715cb00c703839cfb0b85be079db55194c
 F tool/sqlite3_analyzer.c.in 8da2b08f56eeac331a715036cf707cc20f879f231362be0c22efd682e2b89b4f
 F tool/sqltclsh.c.in 1bcc2e9da58fadf17b0bf6a50e68c1159e602ce057210b655d50bad5aaaef898
 F tool/sqltclsh.tcl 862f4cf1418df5e1315b5db3b5ebe88969e2a784525af5fbf9596592f14ed848
@@ -2193,8 +2194,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P 1e49081001f93b75ee499536f8a61a0f49225a1745117bb9267249c38c4bf803
-R 64eb34d956a538c4310c3186c1ebd004
+P ee92fa8366b743266b17c692499087c0d11b9302d096c3dfb4e6356b467e939e
+R 26b2d1af00d15dbbae9294d17198b2cc
 U drh
-Z bedb48464f906f24fcbe994c86e9e98f
+Z 06aea7a30f870e0d4619820ebd6e3381
 # Remove this line to create a well-formed Fossil manifest.
