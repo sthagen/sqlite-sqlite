@@ -5262,7 +5262,7 @@ static LogEst whereSortingCost(
 ** smaller tables.  The central table is called the "fact" table.
 ** The smaller tables that get joined are "dimension tables".
 **
-** SIDE EFFECT:
+** SIDE EFFECT:  (and really the whole point of this subroutine)
 **
 ** If pWInfo describes a star-query, then the cost on WhereLoops for the
 ** fact table is reduced.  This heuristic helps keep fact tables in
@@ -5274,7 +5274,7 @@ static LogEst whereSortingCost(
 */
 static int computeMxChoice(WhereInfo *pWInfo, LogEst nRowEst){
   int nLoop = pWInfo->nLevel;    /* Number of terms in the join */
-  if( nRowEst==0 && nLoop>=4 ){
+  if( nRowEst==0 && nLoop>=5 ){
     /* Check to see if we are dealing with a star schema and if so, reduce
     ** the cost of fact tables relative to dimension tables, as a heuristic
     ** to help keep the fact tables in outer loops.
