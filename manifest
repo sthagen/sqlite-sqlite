@@ -1,5 +1,5 @@
-C OPFS\sVFS:\schange\sthe\sxCheckReservedLock()\simpl\sto\salways\sreturn\sfalse,\sas\sdiscussed\sin\s[forum:a2f573b00cda1372|forum\sthread\sa2f573b00cda1372].\sThis\sdoes\snot\simpact\sany\scurrent\stests,\sand\smay\shave\sno\sdirect\simpact\sat\sall\sbecause\sof\show\sthat\sVFS\shandles\slocking,\sbut\sis\shypothetically\sa\smore\scorrect\ssolution\sthan\sthe\sprevious\sone.
-D 2024-06-12T12:36:02.582
+C Remove\ssome\sJS\sdocs\swhich\sno\slonger\sapply.\sNo\scode\schanges.
+D 2024-06-12T21:01:44.271
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -618,7 +618,7 @@ F ext/wasm/api/sqlite3-license-version-header.js 0c807a421f0187e778dc1078f10d299
 F ext/wasm/api/sqlite3-opfs-async-proxy.js a77fe462e87bb18dcf51574750db89bbec9b95b390dfd01e3b055e7a7813c93d
 F ext/wasm/api/sqlite3-vfs-helper.c-pp.js 3f828cc66758acb40e9c5b4dcfd87fd478a14c8fb7f0630264e6c7fa0e57515d
 F ext/wasm/api/sqlite3-vfs-opfs-sahpool.c-pp.js 8433ee332d5f5e39fb19427fccb7bad7f44aa99b5504daad3343fc128c311e78
-F ext/wasm/api/sqlite3-vfs-opfs.c-pp.js c38e5b372b9019e64bb3babda465c852cb6d59d4ffd3d7a186ed796596bcd9d5
+F ext/wasm/api/sqlite3-vfs-opfs.c-pp.js 4672142c5ebde2f36cfb54ade66beff393c8ceba819fbe3e6d4d16ed28454314
 F ext/wasm/api/sqlite3-vtab-helper.c-pp.js a2fcbc3fecdd0eea229283584ebc122f29d98194083675dbe5cb2cf3a17fe309
 F ext/wasm/api/sqlite3-wasm.c 9267174b9b0591b4f71193542ab57adf95bb9415f7d3453acf4a8ca8052f5e6c
 F ext/wasm/api/sqlite3-worker1-promiser.c-pp.js 46f303ba8ddd1b2f0a391798837beddfa72e8c897038c8047eda49ce7d5ed46b
@@ -739,7 +739,7 @@ F src/os.h 1ff5ae51d339d0e30d8a9d814f4b8f8e448169304d83a7ed9db66a65732f3e63
 F src/os_common.h 6c0eb8dd40ef3e12fe585a13e709710267a258e2c8dd1c40b1948a1d14582e06
 F src/os_kv.c 4d39e1f1c180b11162c6dc4aa8ad34053873a639bac6baae23272fc03349986a
 F src/os_setup.h 6011ad7af5db4e05155f385eb3a9b4470688de6f65d6166b8956e58a3d872107
-F src/os_unix.c 08ca53844f4bf8eafb18b0a9076c84afac41da912315a5cfbe9e704d4c10c090
+F src/os_unix.c 2ea8d3ed496b8d1f9332a9505653424e5464fd797ea9d91f8e2e62f9dd0298d0
 F src/os_win.c 6ff43bac175bd9ed79e7c0f96840b139f2f51d01689a638fd05128becf94908a
 F src/os_win.h 7b073010f1451abe501be30d12f6bc599824944a
 F src/pager.c 9beb80f6e330dd63c5d8ba0f7a7f3a55fff22067a68d424949c389bfc6fa0c56
@@ -1388,7 +1388,7 @@ F test/lock.test be4fe08118fb988fed741f429b7dd5d65e1c90db
 F test/lock2.test 5242d8ac4e2d59c403aebff606af449b455aceff
 F test/lock3.test f271375930711ae044080f4fe6d6eda930870d00
 F test/lock4.test 27143363eda1622f03c133efc8db808fc331afd973486cb571ea71cd717d37b8
-F test/lock5.test c6c5e0ebcb21c61a572870cc86c0cb9f14cede38
+F test/lock5.test 626571313daef2c949ce002f861042d63d81119fa62a9e999721c8bbd85e1ec9
 F test/lock6.test ad5b387a3a8096afd3c68a55b9535056431b0cf5
 F test/lock7.test 49f1eaff1cdc491cc5dee3669f3c671d9f172431
 F test/lock_common.tcl 2f3f7f2e9637f93ccf609df48ef5b27a50278b6b1cd752b445d52262e5841413
@@ -2195,8 +2195,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P 587ed3a5d283898ad0e67ccee86a0a4ccc432fa292c0a3534e9e6ec70a7b7780
-R 627383e1e012584141ebd74c98bd7f4d
+P a44703135e8dd3cc67e548e1aa3c42e71df127fb7b593ccfc06025ec42a501fd
+R f8258a841d7785f7bd34691642a97b21
 U stephan
-Z 9f8d8dcb26b9598cd7f1252d2913b583
+Z 80db9b86bc6469d927101c39e3244f61
 # Remove this line to create a well-formed Fossil manifest.
