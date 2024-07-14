@@ -95,6 +95,7 @@ globalThis.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     ["sqlite3_bind_null",undefined, "sqlite3_stmt*", "int"],
     ["sqlite3_bind_parameter_count", "int", "sqlite3_stmt*"],
     ["sqlite3_bind_parameter_index","int", "sqlite3_stmt*", "string"],
+    ["sqlite3_bind_parameter_name", "string", "sqlite3_stmt*", "int"],
     ["sqlite3_bind_pointer", "int",
      "sqlite3_stmt*", "int", "*", "string:static", "*"],
     ["sqlite3_busy_handler","int", [
@@ -115,6 +116,7 @@ globalThis.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     ["sqlite3_column_blob","*", "sqlite3_stmt*", "int"],
     ["sqlite3_column_bytes","int", "sqlite3_stmt*", "int"],
     ["sqlite3_column_count", "int", "sqlite3_stmt*"],
+    ["sqlite3_column_decltype", "string", "sqlite3_stmt*", "int"],
     ["sqlite3_column_double","f64", "sqlite3_stmt*", "int"],
     ["sqlite3_column_int","int", "sqlite3_stmt*", "int"],
     ["sqlite3_column_name","string", "sqlite3_stmt*", "int"],
@@ -152,6 +154,7 @@ globalThis.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     ["sqlite3_db_filename", "string", "sqlite3*", "string"],
     ["sqlite3_db_handle", "sqlite3*", "sqlite3_stmt*"],
     ["sqlite3_db_name", "string", "sqlite3*", "int"],
+    ["sqlite3_db_readonly", "int", "sqlite3*", "string"],
     ["sqlite3_db_status", "int", "sqlite3*", "int", "*", "*", "int"],
     ["sqlite3_errcode", "int", "sqlite3*"],
     ["sqlite3_errmsg", "string", "sqlite3*"],
@@ -192,10 +195,8 @@ globalThis.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     ["sqlite3_get_autocommit", "int", "sqlite3*"],
     ["sqlite3_get_auxdata", "*", "sqlite3_context*", "int"],
     ["sqlite3_initialize", undefined],
-    /*["sqlite3_interrupt", undefined, "sqlite3*"
-       ^^^ we cannot actually currently support this because JS is
-        single-threaded and we don't have a portable way to access a DB
-        from 2 SharedWorkers concurrently. ],*/
+    ["sqlite3_interrupt", undefined, "sqlite3*"],
+    ["sqlite3_is_interrupted", "int", "sqlite3*"],
     ["sqlite3_keyword_count", "int"],
     ["sqlite3_keyword_name", "int", ["int", "**", "*"]],
     ["sqlite3_keyword_check", "int", ["string", "int"]],
@@ -276,8 +277,10 @@ globalThis.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     ["sqlite3_sql", "string", "sqlite3_stmt*"],
     ["sqlite3_status", "int", "int", "*", "*", "int"],
     ["sqlite3_step", "int", "sqlite3_stmt*"],
-    ["sqlite3_stmt_isexplain", "int", ["sqlite3_stmt*"]],
-    ["sqlite3_stmt_readonly", "int", ["sqlite3_stmt*"]],
+    ["sqlite3_stmt_busy", "int", "sqlite3_stmt*"],
+    ["sqlite3_stmt_explain", "int", "sqlite3_stmt*", "int"],
+    ["sqlite3_stmt_isexplain", "int", "sqlite3_stmt*"],
+    ["sqlite3_stmt_readonly", "int", "sqlite3_stmt*"],
     ["sqlite3_stmt_status", "int", "sqlite3_stmt*", "int", "int"],
     ["sqlite3_strglob", "int", "string","string"],
     ["sqlite3_stricmp", "int", "string", "string"],

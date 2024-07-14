@@ -10,6 +10,7 @@ _sqlite3_bind_int64
 _sqlite3_bind_null
 _sqlite3_bind_parameter_count
 _sqlite3_bind_parameter_index
+_sqlite3_bind_parameter_name
 _sqlite3_bind_pointer
 _sqlite3_bind_text
 _sqlite3_busy_handler
@@ -23,6 +24,7 @@ _sqlite3_collation_needed
 _sqlite3_column_blob
 _sqlite3_column_bytes
 _sqlite3_column_count
+_sqlite3_column_decltype
 _sqlite3_column_double
 _sqlite3_column_int
 _sqlite3_column_int64
@@ -46,6 +48,7 @@ _sqlite3_data_count
 _sqlite3_db_filename
 _sqlite3_db_handle
 _sqlite3_db_name
+_sqlite3_db_readonly
 _sqlite3_db_status
 _sqlite3_declare_vtab
 _sqlite3_deserialize
@@ -64,6 +67,8 @@ _sqlite3_free
 _sqlite3_get_auxdata
 _sqlite3_get_autocommit
 _sqlite3_initialize
+_sqlite3_interrupt
+_sqlite3_is_interrupted
 _sqlite3_keyword_count
 _sqlite3_keyword_name
 _sqlite3_keyword_check
@@ -116,6 +121,8 @@ _sqlite3_sql
 _sqlite3_status
 _sqlite3_status64
 _sqlite3_step
+_sqlite3_stmt_busy
+_sqlite3_stmt_explain
 _sqlite3_stmt_isexplain
 _sqlite3_stmt_readonly
 _sqlite3_stmt_status
